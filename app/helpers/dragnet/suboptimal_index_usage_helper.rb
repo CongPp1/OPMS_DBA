@@ -39,7 +39,7 @@ You should consider to expand index by filter criteria of table access to reduce
 This selection evaluates the current content of SGA.
 Result is sorted by time effort for operation TABLE ACCESS BY ROWID.
 '),
-            :sql=>  " SELECT /* Panorama: cardinality_ratio index/table, thanks to Leonid Nossov */
+            :sql=>  " SELECT /* OPMS: cardinality_ratio index/table, thanks to Leonid Nossov */
                              ta.Inst_ID, ta.SQL_ID, ta.Plan_Hash_Value, ta.ID SQL_Plan_Line_ID, ir.Object_Owner||'.'||ir.Object_Name Index_Name,  ta.Object_Owner||'.'||ta.Object_Name Table_Name, ir.Cardinality Cardinality_Index, ta.Cardinality Cardinality_Table,
                              ir.Access_Predicates Access_Index, ir.Filter_Predicates Filter_Index, ta.Access_Predicates Access_Table, ta.Filter_Predicates Filter_Table, ROUND(ir.Cardinality/ta.Cardinality) Cardinality_Ratio, ash.Seconds Elapsed_Seconds,
                              ash.Min_Sample_Time, ash.Max_Sample_Time

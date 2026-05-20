@@ -295,7 +295,7 @@ end
 
 
 
-    "/* single line SQL-text formatted by Panorama */\n#{sql}"
+    "/* single line SQL-text formatted by OPMS */\n#{sql}"
   end
 
   def system_userid_subselect

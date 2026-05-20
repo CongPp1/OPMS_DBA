@@ -4,7 +4,7 @@
       in <%= @request.parameters['controller'].camelize %>Controller<% if @request.parameters['action'] %>#<%= @request.parameters['action'] %><% end %>
   <% end %>
 </h1>
-<h2>Error at Panorama server</h2><!-- Der vorgenannte String signalisiert dem Error-Dialog, die Response zu rendern und nicht als Text anzuzeigen -->
+<h2>Error at OPMS server</h2><!-- The above string signals the error dialog to render the response instead of displaying it as plain text. -->
 
 <pre><h3>
 <%= h @exception.message %>

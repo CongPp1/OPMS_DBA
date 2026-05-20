@@ -2350,7 +2350,7 @@ BEGIN
   END LOOP;
 
   -- Create new SQL Tuning Set (STS)
-  #{dbms_sqltune}.CREATE_SQLSET(sqlset_name => '#{sts_name}', description => 'Panorama: SQL Tuning Set for loading plan into SQL Plan Baseline');
+  #{dbms_sqltune}.CREATE_SQLSET(sqlset_name => '#{sts_name}', description => 'OPMS: SQL Tuning Set for loading plan into SQL Plan Baseline');
 
   -- Populate STS from AWR, using a time duration when the desired plan was used
   --  Specify the sql_id in the basic_filter (other predicates are available, see documentation)
