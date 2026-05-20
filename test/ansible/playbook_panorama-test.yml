@@ -1,0 +1,239 @@
+# Setup VM for panorama-test
+# Requires Oracle Linux 9
+# Run: > ansible-playbook -i inventory.yml playbook_panorama-test.yml --extra-vars "datadog_api_key=<your API key>"
+- hosts: panorama-test
+
+  vars_prompt:
+    - name: datadog_api_key
+      prompt: Datadog API Key
+      private: yes
+
+  tasks:
+    - name: set timezone to Europe/Berlin
+      become: true
+      timezone:
+        name: Europe/Berlin
+
+    - name: Update system
+      become: true
+      yum:
+        name: "*"
+        state: latest
+
+    - name: Enable repo ol8_developer_EPEL for chromium
+      become: true
+      shell: dnf config-manager --set-enabled ol8_developer_EPEL
+
+    - name: Install additional tools
+      become: true
+      dnf:
+        name:
+          - traceroute
+          - dnf-automatic
+          - rng-tools
+          - gcc-c++
+          - nodejs
+          - npm
+          - chromium
+          - git
+        state: latest
+
+    - name: Apply updates by dnf-automatic
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/automatic.conf
+        regexp: '^apply_updates'
+        line: apply_updates = yes
+
+    - name: mail to by dnf-automatic
+      become: true
+      ansible.builtin.replace:
+        path: /etc/dnf/automatic.conf
+        regexp: '^email_to.*$'
+        replace: email_to = Peter.Ramm@ottogroup.com
+
+    - name: mail host for dnf-automatic
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/automatic.conf
+        regexp: '^email_host'
+        line: email_host = mail.osp-dd.de
+
+    - name: Enable and start dnf-automatic.timer service
+      become: true
+      service:
+        name: dnf-automatic.timer
+        enabled: yes
+        state: started
+
+    - name: Add repository for Docker
+      become: true
+      shell: dnf config-manager --add-repo  https://download.docker.com/linux/centos/docker-ce.repo
+
+    - name: Install docker
+      become: true
+      yum:
+        name: docker-ce
+        state: latest
+
+    - name: Enable and start docker service
+      become: true
+      service:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Ensure kernel setting fs.aio-max-nr
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/sysctl.conf
+        search_string: 'fs.aio-max-nr'
+        line: fs.aio-max-nr= 3145728
+
+    - name: Activate kernel settings from /etc/sysctl.conf
+      become: true
+      shell: sysctl -p /etc/sysctl.conf
+
+    - name: Add the user 'pramm'
+      become: true
+      ansible.builtin.user:
+        name: pramm
+        comment: Peter Ramm
+        groups: users, docker, adm
+
+    - name: Set authorized key taken from file
+      become: true
+      ansible.posix.authorized_key:
+        user: pramm
+        state: present
+        key: "{{ lookup('file', '/Users/pramm/.ssh/id_rsa.pub') }}"
+
+    - name: Create /home/pramm/github_runner
+      become: true
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: pramm
+        mode: '0755'
+      loop:
+        - /home/pramm/github_runner
+        - /home/pramm/github_runner/log
+
+    - name: Copy shell scripts
+      become: true
+      copy:
+        src: '{{item}}'
+        dest: '/home/pramm/github_runner'
+        owner: pramm
+        mode: 0755
+      loop:
+        - start_runners.sh
+        - create_runner.sh
+
+    - name: Copy systemd service file github_runners.service to server
+      become: 'true'
+      copy:
+        src: github_runners.service
+        dest: /etc/systemd/system
+        owner: root
+        group: root
+
+    - name: Install or update sdkman and GraalVM for all users
+      become: 'true'
+      shell: |
+        export SDKMAN_DIR="/usr/local/sdkman" && curl -s "https://get.sdkman.io" | bash
+        source "/usr/local/sdkman/bin/sdkman-init.sh"
+        sdk selfupdate force
+        sdk install java 21-graal
+
+    - name: Source sdkman
+      become: 'true'
+      copy:
+        dest: "/etc/profile.d/sdkman.sh"
+        content: |
+          export SDKMAN_DIR="/usr/local/sdkman"
+          source "/usr/local/sdkman/bin/sdkman-init.sh"
+
+    - name: Start service github_runners.service
+      become: 'true'
+      systemd:
+        name: github_runners.service
+        state: restarted
+        enabled: yes
+
+    - name: Remove dangling Docker images
+      become: true
+      ansible.builtin.cron:
+        name: "Remove dangling Docker images"
+        minute: "0"
+        hour : "0"
+        job: "docker rmi -f $(docker images -f 'dangling=true' -q) > /dev/null 2>&1"
+        user: pramm
+
+    - name: Pull Datadog Docker image
+      become: true
+      docker_image:
+        name: gcr.io/datadoghq/agent:7
+        source: pull
+        force_source: yes
+
+    - name: DataDog Docker container
+      become: true
+      docker_container:
+        name: DataDogAgent
+        image: "gcr.io/datadoghq/agent:7"
+        restart_policy: "always"
+        recreate: "yes"
+        volumes:
+          - "/var/run/docker.sock:/var/run/docker.sock:ro"
+          - "/proc/:/host/proc/:ro"
+          - "/sys/fs/cgroup/:/host/sys/fs/cgroup:ro"
+          - "/etc/os-release:/host/etc/os-release:ro"
+        cgroupns_mode: host
+        pid_mode: host
+        env:
+          # Setting different hostname prevents containers from being recognized by Datadog
+          # DD_HOSTNAME: "panorama.osp-dd.de"
+          DD_SITE: "datadoghq.eu"
+          DD_API_KEY: "{{ datadog_api_key }}"
+          DD_ENV: "dev"
+          #  export DD_TAGS="env:production"
+          DD_LOGS_ENABLED: "true"
+          DD_PROCESS_AGENT_ENABLED: "true"
+          DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+        log_driver: json-file
+        log_options:
+          max-size: "10m"
+          max-file: "10"
+
+#    config gitlab runner
+#>  docker run -d --name OCI_runner1 --restart always -v /srv/gitlab-runner/config1:/etc/gitlab-runner -v /var/run/docker.sock:/var/run/docker.sock gitlab/gitlab-runner:latest
+
+#  Setup ausführen innerhalb des Docker-Containers: > gitlab-runner register
+#  Executor: docker
+#  Image: ruby:2.4
+#  Runner-Config anpassen:
+#  /etc/gitlab-runner/config.toml erweitern in Section "[runners.docker]"
+#  > wait_for_services_timeout=120
+
+##### config self hosted GitHub runner
+#  Follow instructions at github.com
+#  Use /home/pramm/github_runner/create_runner.sh to create runner instances with credentials from github
+
+
+##### Install rvm and jRuby
+
+
+#### Update nodejs
+# dnf remove nodejs
+# dnf config-manager --set-enabled ol8_appstream
+# dnf module list --all nodejs
+# dnf module reset nodejs
+# dnf module enable nodejs:20
+# dnf install nodejs
+
+
+##### Resize root file system
+# Edit the root block device, increase size and save
+# follow instructions
+# /usr/libexec/oci-growfs 

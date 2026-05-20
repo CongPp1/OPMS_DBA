@@ -1,0 +1,39 @@
+# Jarbler configuration, see https://github.com/rammpeter/jarbler
+# values in comments are the default values
+# uncomment and adjust if needed
+
+Jarbler::Config.new do |config|
+  config.compile_ruby_files = false
+
+  # Exclude gems that are not really needed but may cause trouble
+  # fixes problems like: You have already activated erb 4.0.4, but your Gemfile requires erb 6.0.2.
+  no_require = File.readlines('excluded_gems.txt').map(&:strip).reject{|s| s.empty? || s.start_with?('#') }
+  config.excluded_gems = no_require
+
+  # Name of the generated jar file 
+  config.jar_name = 'Panorama.jar'
+
+  # Compile JarMain class so that the resulting Panorama.jar is compatible with Java 8 and above
+  # Works only up to JRuby < 10.0.0.0 which requires Java 21 or above
+  # config.java_opts = '-source 1.8 -target 1.8'
+  config.java_opts = '--release 21'
+
+  config.executable             = 'bin/rails'
+  config.executable_params      = %w(server -e production -p 8080)
+  # config.executable             = '../gems/jruby/3.4.0/bin/puma'
+  # config.executable_params      = %w(-e production -p 8080)
+
+  # Application directories or files to include in the jar file
+  # config.includes = ["app", "bin", "config", "config.ru", "db", "Gemfile", "Gemfile.lock", "lib", "log", "public", "script", "vendor", "tmp"]
+  config.includes << "excluded_gems.txt"
+
+  # Application directories or files to exclude from the jar file
+  # config.excludes = ["tmp/cache", "tmp/pids", "tmp/sockets", "vendor/bundle", "vendor/cache", "vendor/ruby"]
+  # vendor/assets is not needed because duplicate in public
+  config.excludes << 'vendor'
+
+  # jRuby version to use if not the latest or the version from .ruby-version is used
+  # config.jruby_version = "9.2.3.0"
+  # config.jruby_version = ''
+
+end

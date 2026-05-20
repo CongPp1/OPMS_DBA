@@ -1,0 +1,17 @@
+<%= render_page_caption("SQL-Monitor reports from gv$SQL_Monitor and DBA_HIST_Reports") %>
+
+<% @update_area = get_unique_area_id %>
+
+<%= ajax_form(:controller=>:dba_history, :action=>:list_sql_monitor_reports, :update_area=>@update_area) do %>
+  <div class="flex-row-container">
+    <%= include_start_end_timepicker %>
+    <%= instance_tag(rac_only: true) %>
+    <%= dbid_selection %>
+    <div class="flex-row-element">
+      <%= submit_tag('Show SQL-Monitor reports', :title => 'Show SQL-Monitor reports according to filter conditions') %>
+    </div>
+
+  </div>
+<% end %>
+
+<div id="<%= @update_area %>"></div>

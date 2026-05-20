@@ -1,0 +1,72 @@
+<%
+  @update_area = get_unique_area_id
+
+  column_options =
+    [
+      { caption: 'Start time',                data: proc{|rec| localeDateTime(rec.begin_interval_time)},    title: 'Start of considered AWR period', data_title: proc{|rec| "%t: End of considered AWR period = #{localeDateTime(rec.end_interval_time)}" }, :plot_master_time=>true },
+    ]
+
+  exadata_cell_db_columns.each do |key, col|
+    caption = col[:caption].dup
+    caption << ajax_submit('Cells',
+                           { action:                :list_exadata_io_load_distribution,
+                             update_area:           @update_area,
+                             dbid:                  @dbid,
+                             time_selection_start:  @time_selection_start,
+                             time_selection_end:    @time_selection_end,
+                             grouping:              :cell_hash,
+                             column:                key,
+                             src_dbid:              @src_dbid,
+                           },
+                           {
+                             title: "Show distribution of values for '#{col[:caption]}' over all cells#{" limited to DBID = #{@src_dbid}" if @src_dbid > 0}",
+                             onclick: "event.stopPropagation()"  # Prevent double execution of onclick event by the underlying element
+                           },
+                           style: 'display:inline;'
+    )
+    caption << ajax_submit('DBs',
+                           { action:                :list_exadata_io_load_distribution,
+                             update_area:           @update_area,
+                             dbid:                  @dbid,
+                             time_selection_start:  @time_selection_start,
+                             time_selection_end:    @time_selection_end,
+                             grouping:              :src_dbid,
+                             column:                key,
+                             cell_hash:             @cell_hash,
+                           },
+                           {
+                             title: "Show distribution of values for '#{col[:caption]}' over all databases#{" limited to cell server hash = #{@cell_hash}" if @cell_hash > 0}",
+                             onclick: "event.stopPropagation()"  # Prevent double execution of onclick event by the underlying element
+                           },
+                           style: 'display:inline;'
+    )
+
+    column =  { caption: caption, data: proc{|rec| fn(rec[key.to_s], col[:scale] || 0)}, title: col[:title], align: :right }
+    column[:data_title] = proc{|rec| "%t\n\n#{size_explain(rec[key.to_s])}" } if col[:size_explain]
+    column[:data_title] = proc{|rec| "%t\n\n#{seconds_explain(rec[key.to_s])}" } if col[:seconds_explain]
+    column_options << column
+  end
+
+  column_options << { caption: 'Avg. disk request size (KB)',         data: proc{|rec| fn(rec.disk_mb * 1024.to_f / rec.disk_requests ) rescue nil }, title: 'Average size of processed disk requests in kilobytes (small + large)', align: :right }
+  column_options << { caption: 'Avg. flash request size (KB)',        data: proc{|rec| fn(rec.flash_mb * 1024.to_f / rec.flash_requests ) rescue nil }, title: 'Average size of processed flash requests in kilobytes (small + large)', align: :right }
+  column_options << { caption: 'Avg. disk small service time (µs)',   data: proc{|rec| fn(rec.disk_small_io_service_time * 1000000.to_f / rec.disk_small_io_reqs, 2 ) rescue nil }, title: 'Average service time of one small disk I/O request in microseconds', data_title: proc{|rec| "%t\n\n#{seconds_explain((rec.disk_small_io_service_time.to_f / rec.disk_small_io_reqs  rescue nil ))}"}, align: :right }
+  column_options << { caption: 'Avg. disk large service time (µs)',   data: proc{|rec| fn(rec.disk_large_io_service_time * 1000000.to_f / rec.disk_large_io_reqs, 2 ) rescue nil }, title: 'Average service time of one large disk I/O request in microseconds', data_title: proc{|rec| "%t\n\n#{seconds_explain((rec.disk_large_io_service_time.to_f / rec.disk_large_io_reqs  rescue nil ))}"}, align: :right }
+  column_options << { caption: 'Avg. flash small service time (µs)',  data: proc{|rec| fn(rec.flash_small_io_service_time * 1000000.to_f / rec.flash_small_io_reqs, 2 ) rescue nil }, title: 'Average service time of one small flash I/O request in microseconds', data_title: proc{|rec| "%t\n\n#{seconds_explain((rec.flash_small_io_service_time.to_f / rec.flash_small_io_reqs  rescue nil ))}"}, align: :right }
+  column_options << { caption: 'Avg. flash large service time (µs)',  data: proc{|rec| fn(rec.flash_large_io_service_time * 1000000.to_f / rec.flash_large_io_reqs, 2 ) rescue nil }, title: 'Average service time of one large flash I/O request in microseconds', data_title: proc{|rec| "%t\n\n#{seconds_explain((rec.flash_large_io_service_time.to_f / rec.flash_large_io_reqs  rescue nil ))}"}, align: :right }
+
+  caption = "Exadata cell server I/O load from #{PanoramaConnection.adjust_table_name('DBA_Hist_Cell_DB')}"
+  filter = []
+  filter << " cell server hash = #{@cell_hash}" if @cell_hash > 0
+  filter << " source DBID = #{@src_dbid}"       if @src_dbid > 0
+  caption << " for" unless filter.empty?
+  caption << filter.join(' and ')
+%>
+
+<%=
+  gen_slickgrid(@metrics, column_options, { caption: caption,
+                                            max_height: 450,
+                                            show_pin_icon: 1,
+                                            update_area:   @update_area
+  })
+%>
+

@@ -1,0 +1,223 @@
+<!-- @update_area muss durch Aufrufer gesetzt sein -->
+<br/>
+
+<div class="flex-row-container">
+  <div class="flex-row-element">
+    <%= ajax_submit("Execution-Plan (#{fn @execution_plan_count})", {
+        update_area:            @update_area,
+        controller:             :dba_sga,
+        action:                 :list_sql_detail_execution_plan,
+        instance:               @sql.inst_id,
+        sql_id:                 @sql.sql_id,
+        child_number:           (@modus == 'GV$SQL' ? @child_number : nil),
+        child_address:          (@modus == 'GV$SQL' ? @child_address : nil),
+    }, :title =>t(:dba_sga_list_sql_sga_stat_footer_plan_hint, :default=>"Show execution plan of SQL (or plans if there are multiple)"))
+    %>
+  </div>
+
+  <% if @sql.child_count > 1 %>
+    <div class="flex-row-element">
+      <%= ajax_submit("Child cursors (#{fn @sql.child_count})", {
+          :update_area    => @update_area,
+          :controller     => :dba_sga,
+          :action         => :list_sql_child_cursors,
+          :instance       => @sql.inst_id,
+          :sql_id         => @sql.sql_id,
+          object_status:  @object_status,
+          con_id:         @con_id
+      }, :title =>t(:dba_sga_list_sql_sga_stat_footer_child_hint, :default=>"Show child cursors of SQL from gv$SQL"))
+      %>
+    </div>
+  <% end %>
+
+  <% if @sql['child_number'] && @v_sql_sums.child_count > 1 %>
+    <div class="flex-row-element">
+      <%= ajax_submit("Child summary (#{fn @v_sql_sums.child_count})", {
+          :update_area    => @update_area,
+          :controller     => :dba_sga,
+          :action         => :list_sql_detail_sql_id,
+          :instance       => @sql.inst_id,
+          :sql_id         => @sql.sql_id,
+          object_status:  @object_status,
+          con_id:         @con_id
+      }, :title =>"Show summary over all #{fn @v_sql_sums.child_count} child cursors of this SQL-ID in gv$SQLArea")
+      %>
+    </div>
+  <% end %>
+
+
+  <div class="flex-row-element">
+    <%= ajax_submit("Bind variables (#{fn @sql_bind_count})", {
+        :update_area    => @update_area,
+        :controller     => :dba_sga,
+        :action         => :list_bind_variables,
+        :instance       => @sql.inst_id,
+        :sql_id         => @sql.sql_id,
+        :child_number   => @sql['child_number'],
+        :child_address  => @sql['child_address'],
+    }, :title =>t(:dba_sga_list_sql_sga_stat_footer_bind_hint, :default=>"Show bind variables of last execution of SQL"))
+    %>
+  </div>
+
+  <% if @plan_object_count %>
+    <div class="flex-row-element">
+      <%= ajax_submit("Objects (#{fn @plan_object_count})", {
+          :update_area    => @update_area,
+          :controller     => :dba_schema,
+          :action         => :list_objects,
+          :instance       => @sql.inst_id,
+          :sql_id         => @sql.sql_id,
+          :child_number   => @sql['child_number'],
+          :child_address  => @sql['child_address'],
+      }, :title =>t(:dba_sga_list_sql_sga_stat_footer_objects_hint, :default=>"Show accessed objects of SQL determined by execution plan"))
+      %>
+    </div>
+  <% end %>
+
+  <div class="flex-row-element">
+    <%= ajax_submit(t(:dba_sga_list_sql_sga_stat_footer_complete_timeline_caption, :default=>'Full history'), {
+        :update_area => @update_area,
+        :action      => :list_sql_history_snapshots,
+        :controller  => :dba_history,
+        :instance    => @sql.inst_id,
+        :sql_id      => @sql.sql_id,
+        :groupby     => :day,
+        :parsing_schema_name => @sql.parsing_schema_name
+    }, :title =>t(:dba_sga_list_sql_sga_stat_footer_complete_timeline_hint, :default=>"Show complete time history of SQL from AWR for SQL-ID='%{sql_id}' and instance=%{instance}", sql_id: @sql.sql_id, instance: @sql.inst_id))
+    %>
+  </div>
+
+  <div class="flex-row-element">
+    <%=
+      ajax_submit("Cursor Sharing (#{fn @sql.child_count})", {
+          :update_area => @update_area,
+          :action      => :list_sql_shared_cursor,
+          :instance    => @sql.inst_id,
+          :sql_id      => @sql.sql_id
+      }, :title =>t(:dba_sga_list_sql_sga_stat_footer_cursor_sharing_hint, :default=>'Reasons for not using shared cursors (gv$SQL_Shared_Cursor) if multiple versions of SQL exists in gv$SQL')
+      )
+    %>
+  </div>
+
+  <div class="flex-row-element">
+    <%=
+      ajax_submit("Opt. Env.", {
+        :update_area => @update_area,
+        :action      => :list_sql_optimizer_env,
+        :instance    => @sql.inst_id,
+        :sql_id      => @sql.sql_id,
+        child_number: @sql['child_number'] ? @sql.child_number : nil,
+      }, :title =>'Show optimizer environment for this SQL from gv$SQL_Optimizer_Env'
+      )
+    %>
+  </div>
+
+  <div class="flex-row-element">
+    <%= ajax_submit("Active Session History", {
+        :update_area => @update_area,
+        :controller  => :active_session_history,
+        :action      => :show_prepared_active_session_history,
+        :instance    => @sql.inst_id,
+        SQL_ID_or_Top_Level_SQL_ID: @sql.sql_id,
+        child_number: @sql['child_number'] ? @sql.child_number : nil,
+    }, :title => t(:list_sql_detail_sql_id_childno_active_session_history_title, :default=>"Show active session history data for SQL-ID")
+        )
+    %>
+  </div>
+  <div class="flex-row-element">
+    <%=
+      ajax_submit("Open Cursor (#{@open_cursors})", {
+          :action     => :list_open_cursor_per_sql,
+          :instance   => @instance,
+          :sql_id     => @sql_id,
+          :update_area=> @update_area
+      }, :title=>t(:dba_sga_list_sql_sga_stat_footer_open_cursor_hint, :default=>'Show current open cursor of SQL in sessions'))
+    %>
+  </div>
+
+  <% if get_db_version >= '12.1' %>
+    <div class="flex-row-element">
+      <%=
+        ajax_submit('Expand', {
+            controller:   :dba_sga,
+            action:       :expand_sql_text,
+            sql_id:       @sql_id,
+            update_area:  @update_area
+        }, :title=>"Expand SQL-statement: replace accessed views with their original SQL content.\nUsing DBMS_UTILITY.expand_sql_text\nRequires you log in to Panorama as the User who has executed this SQL or SQL uses table names qualified with owner.")
+      %>
+    </div>
+  <% end %>
+
+  <div class="flex-row-element">
+    <% if @sql['child_number'] %>
+      <%=
+        ajax_submit('DBMS_XPLAN', {
+            :action        => :list_dbms_xplan_display,
+            :instance      => @instance,
+            :sql_id        => @sql_id,
+            :child_number  => @sql.child_number,
+            :child_address => @sql.child_address,
+            :update_area=> @update_area
+        }, :title=>t(:dba_sga_list_sql_sga_stat_footer_dbms_xplan_hint, :default=>'Show execution plan as output from call DBMS_XPLAN.DISPLAY'))
+      %>
+    <% else %>
+      <%= ajax_submit('DBMS_XPLAN', {
+        :update_area    => @update_area,
+        :controller     => :dba_sga,
+        :action         => :list_dbms_xplan_display_multiple_children,
+        :instance       => @sql.inst_id,
+        :sql_id         => @sql.sql_id,
+        object_status:  @object_status,
+        con_id:         @con_id
+      }, :title =>'Please select one of the multiple child cursors to be able to show the execution plan by DBMS_XPLAN')
+      %>
+    <% end %>
+  </div>
+
+  <% if get_db_version >= '11.1' && PackLicense.tuning_pack_licensed? %>
+    <div class="flex-row-element">
+      <%=
+        ajax_submit("SQL-Monitor (#{@sql_monitor_reports_count})", {
+          controller:            :dba_history,
+          action:                :list_sql_monitor_reports,
+          update_area:           @update_area,
+          instance:              @instance,
+          sql_id:                @sql_id,
+          time_selection_start:  localeDateTime(@sql.first_load_time, :minutes),
+          time_selection_end:    localeDateTime(PanoramaConnection.db_current_time, :minutes),
+         }, title: strings(:sql_monitor_list_title))
+      %>
+    </div>
+  <% end %>
+
+  <div class="flex-row-element">
+    <%=
+      ajax_submit('SQL plan mgmt.', {
+          controller:               :dba_sga,
+          action:                   :influence_sql_plan,
+          update_area:              @update_area,
+          sql_id:                   @sql_id,
+          user_name:                @sql.parsing_schema_name,
+          force_matching_signature: @sql.force_signature.to_s,
+          exact_matching_signature: @sql.exact_signature.to_s,
+          plan_hash_value:          (@sql[:plan_hash_value_count] && @sql[:plan_hash_value_count] == 1 ? @sql.plan_hash_value : nil),
+      },  title: "Show methods to influence the execution plan without changing the SQL syntax of this SQL")
+    %>
+  </div>
+
+  <% if (get_db_version_numeric.to_i == 19 && get_db_version_numeric >= 19.28) || get_db_version_numeric >= 23.9 %>
+    <%=
+      ajax_submit('Diag. report',
+                  {
+                    controller:               :dba_sga,
+                    action:                   :report_sql,
+                    sql_id:                   @sql_id
+                  },
+                  { title: "Show SQL diagnostic report provided by DBMS_SQLDIAG.Report_SQL.\n\nThis opens a new browser tab, popups need to be enabled." },
+                  { 'data-type': :json }
+      )
+    %>
+
+  <% end %>
+</div>
+

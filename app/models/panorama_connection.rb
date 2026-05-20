@@ -1,0 +1,1223 @@
+# hold open SQL-Cursor and iterate over SQL-result without storing whole result in Array
+# Peter Ramm, 02.03.2016
+
+
+# resolve ActiveRecord::ConnectionAdapters::NullPool in active_record/connection_adapters/abstract_adapter:90
+require 'active_record/connection_adapters/abstract/connection_pool'
+
+require 'active_record/connection_adapters/abstract_adapter'
+
+require 'active_record/connection_adapters/oracle_enhanced/connection'
+require 'active_record/connection_adapters/oracle_enhanced_adapter'
+require 'active_record/connection_adapters/oracle_enhanced/quoting'
+require 'encryption'
+require 'pack_license'
+require 'select_hash_helper'
+require 'exception_helper'
+require 'java'
+java_import 'oracle.jdbc.OracleTypes'  # Oracle-specific Types
+
+# Helper-class to allow usage of method "type_cast"
+class TypeMapper < ActiveRecord::ConnectionAdapters::AbstractAdapter
+    include ActiveRecord::ConnectionAdapters::OracleEnhanced::Quoting
+  def initialize                                                                # fake parameter "connection"
+    super('Dummy')
+  end
+end
+
+# expand class by getter to allow access on internal variable @raw_statement
+ActiveRecord::ConnectionAdapters::OracleEnhanced::JDBCConnection::Cursor.class_eval do
+  def get_raw_statement
+    @raw_statement
+  end
+end
+
+# Class extension by Module-Declaration : module ActiveRecord, module ConnectionAdapters, module OracleEnhancedDatabaseStatements
+# does not work as Engine with Winstone application server, therefore hard manipulation of class ActiveRecord::ConnectionAdapters::OracleEnhancedAdapter
+# and extension with method iterate_query
+
+ActiveRecord::ConnectionAdapters::OracleEnhanced::JDBCConnection.class_eval do
+
+  def log(sql, name = "SQL", binds = [], type_casted_binds = [], statement_name = '[not defined]')
+    ActiveSupport::Notifications.instrumenter.instrument(
+        "sql.active_record",
+        :sql                => sql,
+        :name               => name,
+        :connection_id      => object_id,
+        :statement_name     => statement_name,
+        :binds              => binds,
+        :type_casted_binds  => type_casted_binds
+    ) { yield }
+  end
+
+  # Method comparable with ActiveRecord::ConnectionAdapters::OracleEnhancedDatabaseStatements.exec_query,
+  # but without storing whole result in memory
+  # @param sql [String] SQL-Statement to execute
+  # @param name [String] Name of the SQL-Statement, used for logging
+  # @param binds [Array] Array of ActiveRecord::Relation::QueryAttribute objects, used for binding parameters
+  # @param modifier [Proc] Proc to modify each row before yielding it
+  # @param query_timeout [Integer] Timeout in seconds for query execution, default is 600 seconds
+  def iterate_query(sql, name: 'SQL', binds: [], type_casted_binds: [], modifier: nil, query_timeout: nil, convert_tz: true, &block)
+    log(sql, name, binds, type_casted_binds) do
+      cursor = nil
+      cursor = prepare(sql)
+      cursor.bind_params(type_casted_binds) if !type_casted_binds.empty?
+
+      cursor.get_raw_statement.setQueryTimeout(query_timeout.to_i) if query_timeout          # Erweiterunge gegenüber exec_query
+      cursor.exec
+
+      columns = cursor.get_col_names.map do |col_name|
+        # @connection.oracle_downcase(col_name)                               # Rails 5-Variante
+        # oracle_downcase(col_name) moved to private _oracle_downcase
+        #col_name =~ /[a-z]/ ? col_name : col_name.downcase!
+        { name: col_name.downcase!.freeze}
+      end
+
+      column_types = cursor.column_types                                        # Avoid multiple calls to cursor.get_column_types
+
+      # get synthetic names if SQL did not return any column names (e.g. SELECT 1 FROM DUAL)
+      columns.each_with_index do |col, index|
+        if col[:name].nil? || col[:name].empty?
+          columns[index][:name] =  "[ Unnamed #{index} ]"
+        end
+        columns[index][:oracle_type] = column_types[index]
+      end
+
+      # Remember the time offset for sysdate
+      client_tz_offset_hours = PanoramaConnection.client_tz_offset_hours
+
+      fetch_options = {get_lob_value: true} # convert LOB columns to String
+      # noinspection RubyAssignmentExpressionInConditionalInspection
+      row_count = 0
+      while row = cursor.fetch(fetch_options)
+        row_count += 1
+        result_hash = {}
+        columns.each_index do |index|
+          # Convert date and timestamp columns to the client timezone of Panorama-Server
+          if convert_tz && [:DATE, :TIMESTAMP].include?(columns[index][:oracle_type])
+            row[index] = row[index] + (client_tz_offset_hours * 3600) unless row[index].nil?
+          end
+
+          result_hash[columns[index][:name]] = row[index]
+          row[index] = row[index].strip if row[index].class == String   # Remove possible 0x00 at end of string, this leads to error in Internet Explorer
+        end
+        result_hash.extend SelectHashHelper
+        modifier.call(result_hash)  unless modifier.nil?
+        yield result_hash
+      end
+
+      Rails.logger.debug "#{row_count} records "
+      nil
+    ensure
+      cursor.close if defined?(cursor) && !cursor.nil?
+    end
+  end #iterate_query
+
+  # Method comparable to ActiveRecord::ConnectionAdapters::OracleEnhancedDatabaseStatements.exec_update
+  def exec_update(sql, name, binds = [])
+    type_casted_binds = binds.map { |attr| TypeMapper.new.type_cast(attr.value_for_database) }
+
+    log(sql, name, binds, type_casted_binds) do
+      cursor = prepare(sql)
+      cursor.bind_params(type_casted_binds) if !binds.empty?
+      res = cursor.exec_update
+      res
+    ensure
+      cursor.close if defined?(cursor) && !cursor.nil?
+    end
+  end
+end #class_eval
+
+# Holds DB-Connection(s) to several Oracle-targets thread-safe apart from ActiveRecord
+
+# Config for DB connection for current threads request is stored in Thread.current[:]
+
+# noinspection RubyClassVariableUsageInspection
+class PanoramaConnection
+
+  attr_accessor :used_in_thread
+  attr_accessor :last_used_time
+  attr_accessor :last_used_query_timeout
+  attr_accessor :sql_errors_count
+  attr_reader :block_common_header_size
+  attr_reader :cdb
+  attr_reader :client_tz_offset_hours                                           # Difference in seconds between Panorama-Server client time zone and DB-Server system time zone
+  attr_reader :cluster_database                                                 # 'TRUE' if DB is a RAC
+  attr_reader :con_id
+  attr_reader :database_name
+  attr_reader :data_header_size
+  attr_reader :dbid
+  attr_reader :db_blocksize
+  attr_reader :db_wordsize
+  attr_reader :db_version
+  attr_reader :edition
+  attr_reader :instance_number
+  attr_reader :jdbc_connection
+  attr_reader :last_used_action_name
+  attr_reader :login_container_dbid                                             # DBID of the PDB where user is connected to
+  attr_reader :logon_time
+  attr_reader :password_hash
+  attr_reader :pid
+  attr_reader :rowid_size
+  attr_reader :saddr
+  attr_reader :serial_no
+  attr_reader :sid
+  attr_reader :sql_stmt_in_execution
+  attr_reader :table_directory_entry_size
+  attr_reader :time_delay_secs                                                  # Difference between DB-Server and Panorama-Server in seconds (DB-server - Panorama-server)
+  attr_reader :transaction_fixed_header_size
+  attr_reader :transaction_variable_header_size
+  attr_reader :unsigned_byte_4_size
+
+
+  # Array of PanoramaConnection instances, elements consists of:
+  #   @jdbc_connection
+  #   @used_in_thread
+  #   @last_used_time
+  @@connection_pool = []
+
+  @@connection_pool_mutex = Mutex.new                                           # Ensure synchronized operations on @@connection_pool
+
+  public
+
+  ############################ instance methods #########################
+  def initialize(new_jdbc_connection)                                    # Object instantiation is always done within working thread
+    @jdbc_connection          = new_jdbc_connection
+    @used_in_thread           = true
+    @last_used_query_timeout  = 600                                             # initial value, should be overwritten in check_for_open_connection
+    @last_used_time           = Time.now
+    @password_hash            = PanoramaConnection.get_decrypted_password.hash
+    @sql_errors_count         = 0                                               # No errors counted for this SQL
+  end
+
+  def read_initial_attributes
+    db_config   = PanoramaConnection.direct_select_one(@jdbc_connection,
+                  "SELECT i.Instance_Number, i.Version, d.DBID, d.Name Database_Name, SYS_CONTEXT('USERENV', 'SID') SID, v.Edition,
+                          CASE WHEN d.Platform_Name LIKE '%64%' THEN 8 ELSE 4 END                                                              db_wordsize,
+                          NVL((SELECT /*+ NO_MERGE */ TO_NUMBER(Value) FROM #{system_parameter_table[1..-1]} WHERE Name = 'db_block_size'), 8192)       db_blocksize,
+                          NVL((SELECT /*+ NO_MERGE */ Value FROM #{system_parameter_table[1..-1]} WHERE Name = 'cluster_database'), 'FALSE')            cluster_database,
+                          (SELECT Type_Size FROM v$Type_Size WHERE Type = 'KCBH')                                                         Block_Common_Header_Size,
+                          (SELECT Type_Size FROM v$Type_Size WHERE Type = 'UB4')                                                          Unsigned_Byte_4_Size,
+                          (SELECT Type_Size FROM v$Type_Size WHERE Type = 'KTBBH')                                                        Transaction_Fixed_Header_Size,
+                          (SELECT Type_Size FROM v$Type_Size WHERE Type = 'KTBIT')                                                        Transaction_Var_Header_Size, /* Size of ITL entry */
+                          (SELECT Type_Size FROM v$Type_Size WHERE Type = 'KDBH')                                                         Data_Header_Size,
+                          (SELECT Type_Size FROM v$Type_Size WHERE Type = 'KDBT')                                                         Table_Directory_Entry_Size,
+                          (SELECT VSIZE(rowid) FROM Dual)                                                                                 RowID_Size,
+                          SYSDATE                                                                                                         Logon_time,
+                          (CURRENT_DATE - SYSDATE) * 24                                                                                   Client_TZ_Offset_Hours
+                   FROM   v$Instance i
+                   CROSS JOIN v$Database d
+                   CROSS JOIN (SELECT CASE
+                                      WHEN SUM(CASE WHEN Banner LIKE '%Enterprise Edition%' OR Banner LIKE '%EE%' THEN 1 ELSE 0 END) > 0 THEN 'enterprise'
+                                      WHEN SUM(CASE WHEN Banner LIKE '%Express Edition%' THEN 1 ELSE 0 END) > 0 THEN 'express'
+                                      WHEN SUM(CASE WHEN Banner LIKE '%Free Release%' THEN 1 ELSE 0 END) > 0 THEN 'free'
+                                      ELSE 'standard'
+                                      END edition
+                               FROM   v$version
+                              ) v
+                  ")
+    @block_common_header_size         = db_config['block_common_header_size']
+    @cluster_database                 = db_config['cluster_database']
+    @data_header_size                 = db_config['data_header_size']
+    @db_version                       = db_config['version']
+    @dbid                             = db_config['dbid']
+    @database_name                    = db_config['database_name']
+    @db_blocksize                     = db_config['db_blocksize']
+    @db_wordsize                      = db_config['db_wordsize']
+    @client_tz_offset_hours           = db_config['client_tz_offset_hours']
+    @edition                          = (db_config['edition'] || 'standard').to_sym
+    @instance_number                  = db_config['instance_number']
+    @login_container_dbid             = db_config['dbid']                       # Default is DB's DBID, specified later for CDBs
+    @logon_time                       = db_config['logon_time']
+    @rowid_size                       = db_config['rowid_size']
+    @sid                              = db_config['sid']                          # Session-ID on DB-Server
+    @table_directory_entry_size       = db_config['table_directory_entry_size']
+    @table_directory_entry_size       = @unsigned_byte_4_size if @table_directory_entry_size.nil? # not set in any releases
+    @transaction_fixed_header_size    = db_config['transaction_fixed_header_size']
+    @transaction_variable_header_size = db_config['transaction_var_header_size']
+    @unsigned_byte_4_size             = db_config['unsigned_byte_4_size']
+
+    @db_version = PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT Version_Full FROM v$Instance")['version_full'] if @db_version >= '19'
+
+    session_info = PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT /*+ CARDINALITY(p 1000) CARDINALITY(s 1000) */ s.Serial# Serial_No #{", s.Con_ID" if @db_version >= '12.1'},
+                                                                                  RawToHex(s.Saddr) Saddr, p.PID
+                                                                           FROM   v$Session s
+                                                                           JOIN   v$Process p ON p.Addr = s.pAddr
+                                                                           WHERE s.audsid = SYS_CONTEXT('USERENV', 'sessionid')")
+    @serial_no  = session_info['serial_no']
+    @saddr      = session_info['saddr']
+    @pid        = session_info['pid']
+
+    if @db_version >= '12.1'
+      @con_id               = session_info['con_id']
+      @cdb                  = PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT CDB FROM v$Database")['cdb']
+      @login_container_dbid = PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT DBID FROM v$Containers WHERE Con_ID = (SELECT Con_ID FROM v$Session WHERE SID = SYS_CONTEXT('userenv', 'sid'))")['dbid']
+    else
+      @con_id        = 0
+      @cdb           = 'NO'
+    end
+
+    db_time = PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT CURRENT_DATE FROM Dual")['current_date'] # Time on DB-Server, but flagged as UTC
+    local_time = Time.now                                                       # Time on Panorama-Server with time zone
+    panorama_time = Time.new(local_time.year, local_time.month, local_time.day, local_time.hour, local_time.min, local_time.sec, 0) # Time on Panorama-Server with same value but flagged as UTC
+    @time_delay_secs = db_time - panorama_time                                  # Difference between client time zone time of Panorama server and Ruby time in seconds (DB-current time - Panorama-server)
+    @time_delay_secs = (@time_delay_secs/10.0).round * 10                       # Round to seconds with +/- 5 seconds
+  end
+
+  def register_sql_execution(stmt)
+    @sql_stmt_in_execution = stmt
+  end
+
+  def unregister_sql_execution
+    @sql_stmt_in_execution = nil
+  end
+
+  def set_module_action(action_name)
+    if !defined?(@last_used_action_name) || @last_used_action_name != action_name
+      @jdbc_connection.exec_update("call dbms_application_info.set_Module('Panorama', :action)", 'set_application_info',
+                                   [ActiveRecord::Relation::QueryAttribute.new(':action', action_name, ActiveRecord::Type::Value.new)]
+      )
+    end
+    @last_used_action_name = action_name
+  end
+
+  def get_config_from_jdbc_connection
+    @jdbc_connection.instance_variable_get(:@config)
+  end
+
+  #### Lazy cached values
+
+  # is DB an autonoumous DB
+  # @return [Boolean] true if DB is an autonomous DB
+  def autonomous_database?
+    if !defined?(@autonomous_database) || @autonomous_database.nil?
+      begin
+        cloud_identity = PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT Cloud_Identity FROM v$Containers WHERE RowNum < 2")
+        @autonomous_database = cloud_identity['cloud_identity'].include?('AUTONOMOUSDATABASE')    # The DATABASE_OCID shout contain this String for autonomous DBs
+      rescue Exception
+        @autonomous_database = false                                            # not autonomous database because cloud_identity is not available
+      end
+    end
+    @autonomous_database
+  end
+
+  # @return [String] the name of the system parameter table to use
+  def system_parameter_table
+    if !defined?(@system_parameter_table) || @system_parameter_table.nil?
+      @system_parameter_table = 'GV$System_Parameter'                           # Default if no other need
+      if PanoramaConnection.direct_select_one(@jdbc_connection, "SELECT Value FROM v$System_Parameter WHERE Name = 'cpu_count'")['value'].nil?
+        @system_parameter_table = 'GV$Parameter'                                # Use gv$Parameter if v$System_Parameter has empty values (e.g. for autonomous DB)
+      end
+    end
+    @system_parameter_table
+  end
+
+  # Select PDBs each time they are requested because number of PDBs may change during lifetime of PanoramaConnection
+  def pdbs
+    if !defined?(@pdbs) || @pdbs.nil?
+      if db_version >= '12.1'
+        @pdbs = PanoramaConnection.direct_select(@jdbc_connection, "SELECT DISTINCT Con_ID, DBID, Name FROM gv$Containers WHERE Con_ID != 0").map do |p|
+          { con_id: p['con_id'], dbid: p['dbid'], name: p['name']}
+        end
+      else
+        @pdbs = []
+      end
+    end
+    @pdbs
+  end
+
+  # Cache existing DBIDs once per connection
+  def all_awr_dbids
+    if !defined?(@awr_dbids) || @awr_dbids.nil?
+      @awr_dbids = case PanoramaConnection.management_pack_license
+                   when :none then []                                          # suppress access violations on AWR tables
+                   else
+                     PanoramaConnection.sql_select_all "\
+                      SELECT s.DBID, n.DB_Name, s.Start_TS, s.End_TS, Con_ID
+                      FROM   (
+                               SELECT DBID, MIN(Begin_Interval_Time) Start_TS, MAX(End_Interval_Time) End_TS,
+                               #{PanoramaConnection.db_version >= '12.1' ? "Con_ID" : "0"} Con_ID
+                      FROM   DBA_Hist_Snapshot ss
+                      GROUP BY DBID, #{PanoramaConnection.db_version >= '12.1' ? "Con_ID" : "0"}
+                      ) s
+                      JOIN   (SELECT /*+ NO_MERGE */ DBID,
+                                     MAX(DB_Name) KEEP (DENSE_RANK LAST ORDER BY Startup_Time) DB_Name
+                              FROM   DBA_Hist_Database_Instance d
+                              GROUP BY DBID
+                             ) n ON n.DBID = s.DBID"
+                   end
+    end
+    @awr_dbids
+  end
+
+  # The smallest AWR interval in minutes of any PDB or Panorama Sampler
+  def min_awr_interval
+    if !defined?(@min_awr_interval) || @min_awr_interval.nil?
+      @min_awr_interval = 60                                                    # Default if nothing else specified
+      if PanoramaConnection.management_pack_license != :none
+        @min_awr_interval = PanoramaConnection.sql_select_one("SELECT MIN(EXTRACT(DAY FROM 24*60*w.Snap_Interval))
+                                                               FROM   DBA_Hist_WR_Control w
+                                                               WHERE  w.DBID = (SELECT DBID FROM v$Database)
+                                                               #{" OR (w.DBID, w.Con_ID) IN (SELECT DBID, Con_ID FROM gv$Containers)" if PanoramaConnection.db_version >= '12.1' }
+                                                              ")
+        if  @min_awr_interval.nil?
+          @min_awr_interval = 60                                                # Default if nothing returned by the previous query
+          Rails.logger.debug('PanoramaConnection.min_awr_interval') { "Hard set of min_awr_interval = #{@min_awr_interval} for management_pack_license = #{PanoramaConnection.management_pack_license.inspect} because of no result from SQL" }
+        end
+
+        if @min_awr_interval > 1440
+          Rails.logger.debug('PanoramaConnection.min_awr_interval') { "Hard set of min_awr_interval = 1440 for management_pack_license = #{PanoramaConnection.management_pack_license.inspect} because of too high value #{@min_awr_interval}" }
+          @min_awr_interval = 1440                                              # Limit to 24 hours, should not happen
+        end
+      end
+      Rails.logger.debug('PanoramaConnection.min_awr_interval') { "Set min_awr_interval = #{@min_awr_interval} for management_pack_license = #{PanoramaConnection.management_pack_license.inspect}" }
+    end
+    @min_awr_interval
+  end
+
+  def stat_id_consistent_gets
+    if !defined?(@stat_id_consistent_gets)
+      @stat_id_consistent_gets = PanoramaConnection.sql_select_one "SELECT Statistic# FROM v$StatName WHERE Name = 'consistent gets'"
+    end
+    @stat_id_consistent_gets
+  end
+  ########################### class methods #############################
+  # Store connection redentials for this request in thread, marks begin of request
+  def self.set_connection_info_for_request(config)
+    reset_thread_local_attributes
+    Thread.current[:panorama_connection_connect_info] = config
+  end
+
+  # Ensure initialized values if thread is reused
+  def self.reset_thread_local_attributes
+    Thread.current[:panorama_connection_app_info_set] = nil
+    Thread.current[:panorama_connection_connect_info] = nil
+  end
+
+  # set the initial value for used dbid at login time (DB's DBID or CDB's DBID)
+  def self.select_initial_dbid
+    unless PanoramaConnection.is_cdb?            # used DB's DBID if not CDB
+      Rails.logger.debug('PanoramaConnection.select_initial_dbid') { "Chosen #{PanoramaConnection.dbid} because DB is not a CDB"}
+      return PanoramaConnection.dbid
+    end
+    begin
+      login_container_snapshot_count=  sql_select_one(["SELECT COUNT(*) FROM DBA_Hist_Snapshot WHERE DBID = ?", PanoramaConnection.login_container_dbid])
+    rescue Exception => e
+      if e.message['ORA-00942']
+        Rails.logger.debug('PanoramaConnection.select_initial_dbid') { "Chosen #{PanoramaConnection.dbid} because selecting xxx_Sanpshot ended up in ORA-00942"}
+        return PanoramaConnection.dbid                                          # DBA_Hist_Snapshot does not already exists! Should happen only if Panorama_Snapshot is used for sampler and DB structures are not yet created
+      else
+        raise
+      end
+    end
+    if login_container_snapshot_count == 0                                      # Check if AWR for container is really sampled
+      Rails.logger.debug('PanoramaConnection.select_initial_dbid') { "Chosen #{PanoramaConnection.dbid} because there are no snapshots for #{PanoramaConnection.login_container_dbid}"}
+      return PanoramaConnection.dbid                                            # Use connections DBID if container has no AWR data
+    else
+      Rails.logger.debug('PanoramaConnection.select_initial_dbid') { "Chosen #{PanoramaConnection.login_container_dbid} because there are snapshots for that DBID"}
+      return PanoramaConnection.login_container_dbid                            # Use containers DBID if container has AWR data
+    end
+  end
+
+  # Get the connection associated with the current thread
+  # @return [PanoramaConnection] the connection object for the current thread or nil if not connected
+  def self.thread_connection
+    Thread.current[:panorama_connection_connection_object]
+  end
+
+  # Set the connection object for the current thread
+  # @param value [PanoramaConnection] the connection object to set for the current thread
+  # @return [void]
+  def self.set_thread_connection(value)
+    Thread.current[:panorama_connection_connection_object] = value
+  end
+
+  # Release connection at the end of request to mark free in pool or destroy
+  def self.release_connection
+    if thread_connection
+      @@connection_pool_mutex.synchronize do
+        thread_connection.used_in_thread = false
+      end
+      set_thread_connection(nil)
+    end
+    PanoramaConnection.reset_thread_local_attributes                            # Ensure fresh thread attributes if thread is reused from pool
+  end
+
+  def self.destroy_connection
+    if !thread_connection.nil?
+      @@connection_pool_mutex.synchronize do
+        destroy_connection_in_mutexed_pool(thread_connection)
+      end
+      set_thread_connection(nil)
+    end
+  end
+
+  # disconnect connections that are not used for x seconds
+  # Active connections are observed by socket timeout set during connect by setNetworkTimeout
+  # There's no way to logoff a working connection because logoff blocks until end of statement execution
+  def self.disconnect_aged_connections(min_age_for_disconnect_idle)
+    @@connection_pool_mutex.synchronize do
+      @@connection_pool.clone.each do |conn|                                    # clone to ensure eqch connection is checked even if Array-nodes are removed between
+        config = conn.get_config_from_jdbc_connection
+        if !conn.used_in_thread && conn.last_used_time < Time.now - min_age_for_disconnect_idle
+          Rails.logger.info "Disconnect DB connection because last used is older than #{min_age_for_disconnect_idle} seconds: URL='#{config[:url]}' user='#{config[:username]}' last used=#{conn.last_used_time} last action='#{conn.last_used_action_name}' SID=#{conn.sid}"
+          destroy_connection_in_mutexed_pool(conn)
+        end
+
+        # Ensure that cancelled network connections are removed from connection pool
+        # Cancelling should be done by setNetworkTimeout, Exception handling due to socket read error should remove connection from pool
+        min_age_for_active_disconnect = conn.last_used_query_timeout * 2
+        if conn.used_in_thread && conn.last_used_time < Time.now - min_age_for_active_disconnect
+          Rails.logger.error('PanoramaConnection.disconnect_aged_connections') { "Long running active DB connection should have been cancelled yet by socket read timeout after #{min_age_for_active_disconnect} seconds: URL='#{config[:url]}' User='#{config[:username]}', last used=#{conn.last_used_time}, last action='#{conn.last_used_action_name}', last query timeout=#{conn.last_used_query_timeout}" }
+        end
+      end
+    end
+  rescue Exception => e
+    Rails.logger.error('PanoramaConnection.disconnect_aged_connections') { "Exception #{e.class}:\n#{e.message}" }
+    ExceptionHelper.log_exception_backtrace(e, 40)
+    raise e
+  end
+
+
+  def self.get_connection_pool                                                  # get pool info, for read access only
+    @@connection_pool
+  end
+
+  # Check for existence and readability of a table
+  def self.panorama_table_exists?(table_name)
+    return false if PanoramaConnection.get_threadlocal_config[:panorama_sampler_schema].nil?
+    PanoramaConnection.sql_select_one(["SELECT COUNT(*) FROM All_Tables WHERE Table_Name=? and Owner = '#{PanoramaConnection.get_threadlocal_config[:panorama_sampler_schema].upcase}'", table_name.upcase]) > 0
+  end
+
+
+  # Check existence and readability of the sampler table
+  # Execute only once per connection
+  def panorama_object_sizes_exists?
+    unless defined?(@panorama_object_sizes_exists) && !@panorama_object_sizes_exists.nil?
+      @panorama_object_sizes_exists = PanoramaConnection.panorama_table_exists?('Panorama_Object_Sizes')
+    end
+    @panorama_object_sizes_exists
+  end
+
+
+  def self.all_awr_dbids;                   check_for_open_connection.all_awr_dbids;                     end
+  def self.autonomous_database?;            check_for_open_connection.autonomous_database?;              end
+  def self.block_common_header_size;        check_for_open_connection.block_common_header_size;          end
+  def self.con_id;                          check_for_open_connection.con_id;                            end  # Container-ID for PDBs or 0
+  def self.client_tz_offset_hours;          check_for_open_connection.client_tz_offset_hours;            end
+  def self.data_header_size;                check_for_open_connection.data_header_size;                  end
+  def self.db_version;                      check_for_open_connection.db_version;                        end
+  def self.dbid;                            check_for_open_connection.dbid;                              end
+  def self.database_name;                   check_for_open_connection.database_name;                     end
+  def self.db_blocksize;                    check_for_open_connection.db_blocksize;                      end
+  def self.db_wordsize;                     check_for_open_connection.db_wordsize;                       end
+  def self.edition;                         check_for_open_connection.edition;                           end
+  def self.instance_number;                 check_for_open_connection.instance_number;                   end
+  def self.is_cdb?;                         check_for_open_connection.cdb == 'YES';                      end
+  def self.last_used_action_name;           check_for_open_connection.last_used_action_name;             end
+  def self.login_container_dbid;            check_for_open_connection(false).login_container_dbid; end
+  # @return [Symbol] :diagnostics_and_tuning_pack or :diagnostics_pack or :panorama_sampler or :none
+  # Use PackLicense.tuning_pack_licensed? etc. instead of this method
+  def self.management_pack_license;         PanoramaConnection.get_threadlocal_config[:management_pack_license]; end
+  def self.min_awr_interval;                check_for_open_connection.min_awr_interval;                  end
+  def self.panorama_object_sizes_exists?;   check_for_open_connection.panorama_object_sizes_exists?;     end
+  def self.pdbs;                            check_for_open_connection.pdbs;                              end
+  def self.pid;                             check_for_open_connection.pid;                               end
+  def self.rac?;                            check_for_open_connection.cluster_database.upcase == 'TRUE'; end
+  def self.rowid_size;                      check_for_open_connection.rowid_size;                        end
+  def self.saddr;                           check_for_open_connection.saddr;                             end
+  def self.serial_no;                       check_for_open_connection.serial_no;                         end
+  def self.sid;                             check_for_open_connection.sid;                               end
+  def self.system_parameter_table;          check_for_open_connection.system_parameter_table;            end
+  # @return [Time] Time in client time zone of the Panorama server, should mostly be the same like Time.now but not really sure
+  def self.db_current_time;                 Time.now + check_for_open_connection.time_delay_secs;        end
+  def self.stat_id_consistent_gets;         check_for_open_connection.stat_id_consistent_gets;           end
+  def self.table_directory_entry_size;      check_for_open_connection.table_directory_entry_size;        end
+  def self.transaction_fixed_header_size;   check_for_open_connection.transaction_fixed_header_size;     end
+  def self.transaction_variable_header_size;check_for_open_connection.transaction_variable_header_size;  end
+  def self.unsigned_byte_4_size;            check_for_open_connection.unsigned_byte_4_size;              end
+  def self.username;                        check_for_open_connection;        get_threadlocal_config[:user].upcase;    end
+
+  private
+
+
+  # should be called from within synchronized mutex
+  def self.destroy_connection_in_mutexed_pool(destroy_conn)
+    config = destroy_conn.get_config_from_jdbc_connection
+    thread = Thread.new{PanoramaConnection.destroy_jdbc_connection_in_thread(destroy_conn, config)}  # Schedule disconnect of connection in separate thread because it may block
+    thread.name = 'PanoramaConnection.destroy_jdbc_connection_in_thread'
+    @@connection_pool.delete(destroy_conn)
+    Rails.logger.info "Database connection scheduled in thread to destroy: URL='#{config[:url]}' User='#{config[:username]}' Last used=#{destroy_conn.last_used_time} SID=#{destroy_conn.sid} Remaining pool size=#{@@connection_pool.count}"
+  end
+
+  # Should be called in separate thread because it may block until TCP read timeout
+  def self.destroy_jdbc_connection_in_thread(destroy_conn, config)
+    destroy_conn.jdbc_connection.logoff
+    Rails.logger.info "destroy_jdbc_connection_in_thread: Database connection destroyed: URL='#{config[:url]}' User='#{config[:username]}' Last used=#{destroy_conn.last_used_time} SID=#{destroy_conn.sid} Remaining pool size=#{@@connection_pool.count}"
+  rescue Exception => e
+    Rails.logger.info "destroy_jdbc_connection_in_thread: #{e.class} #{e.message} during logoff. URL='#{config[:url]}' User='#{config[:username]}' Last used=#{destroy_conn.last_used_time} SID=#{destroy_conn.sid}"
+  end
+
+  def self.get_host_tns(current_database)                                            # JDBC-URL for host/port/sid
+    sid_separator = case current_database[:sid_usage].to_sym
+                      when :SID then          ':'
+                      when :SERVICE_NAME then '/'
+                      else raise "Unknown value '#{current_database[:sid_usage]}' for :sid_usage"
+                    end
+    connect_prefix = current_database[:sid_usage].to_sym==:SERVICE_NAME ? '//' : ''                 # only for service name // is needed at first
+    "#{connect_prefix}#{current_database[:host]}:#{current_database[:port]}#{sid_separator}#{current_database[:sid]}"   # Evtl. existierenden TNS-String mit Angaben von Host etc. ueberschreiben
+  end
+
+  def self.jdbc_thin_url
+    "jdbc:oracle:thin:@#{get_threadlocal_config[:tns]}"
+  end
+
+  # Get the JDBC connection for the current thread, or create a new one if not already connected
+  def self.get_jdbc_raw_connection
+    check_for_open_connection
+    thread_connection.jdbc_connection.raw_connection
+  end
+
+  def self.get_jdbc_driver_version
+    get_jdbc_raw_connection.getMetaData.getDriverVersion
+  rescue Exception => e
+    e.message                                                                   # return Exception message instead of raising exception
+  end
+
+  def self.get_jdbc_driver_path
+    get_jdbc_raw_connection.getClass.getProtectionDomain.getCodeSource.getLocation.getPath
+  rescue Exception => e
+    e.message                                                                   # return Exception message instead of raising exception
+  end
+
+
+  # Get the warnings of the current JDBC connection
+  # @return [String] the warnings of the current JDBC connection
+  def self.get_connection_warnings
+    retval = String.new
+    warning = get_jdbc_raw_connection.get_warnings
+    while warning
+      retval << "#{warning.get_message}\n"
+      warning = warning.get_next_warning
+    end
+    retval.length == 0 ? nil : retval
+  rescue Exception => e
+    e.message                                                                   # return Exception message instead of raising exception
+  end
+
+  def self.sql_prepare_binds(sql)
+    binds = []
+    if sql.class == Array
+      stmt =sql[0].dup                                                          # Kopieren und unfreeze, da im Stmt nachfolgend Ersetzung von ? durch :A1 .. :A<n> durchgeführt wird
+      # Aufbereiten SQL: Ersetzen Bind-Aliases
+      bind_index = 0
+      while stmt['?']                                                           # Iteration über Binds
+        bind_index = bind_index + 1
+        bind_alias = ":A#{bind_index}"
+        stmt['?'] = bind_alias                                                  # Ersetzen ? durch Host-Variable
+
+        raise "bind value at position #{bind_index} missing for '#{bind_alias}' in binds-array!\nBinds: #{sql.drop(1)}\nSQL:\n #{stmt}" if sql.count <= bind_index
+        raise "bind value at position #{bind_index} is NULL for '#{bind_alias}' in binds-array!\nBinds: #{sql.drop(1)}\nSQL:\n #{stmt}" unless sql[bind_index]
+
+        binds << ActiveRecord::Relation::QueryAttribute.new(bind_alias, sql[bind_index], ActiveRecord::Type::Value.new)
+      end
+    else
+      if sql.class == String
+        stmt = sql
+      else
+        raise "Unsupported Parameter-Class '#{sql.class.name}' for parameter sql of sql_select_all(sql)"
+      end
+    end
+    [stmt, binds]
+  end
+
+  public
+
+  # Replace table_name according to license, used for view captions
+  def self.adjust_table_name(table_name)
+    PackLicense.translate_sql_table_names(table_name, PanoramaConnection.management_pack_license)
+  end
+
+  def self.get_nested_exception_message(exception)
+    if exception.cause                                                          # exception class supports cause
+      message = String.new
+      cause = exception
+      while cause = cause.cause                                                 # dig into nested causes
+        message << "#{cause.class}:\n#{cause.message}"
+      end
+      message
+    else
+      "#{exception.class}:\n#{exception.message}"                               # direct use of exception's message
+    end
+  end
+
+  # does the table exist in DB?
+  # @param table_name [String] name of table
+  # @param owner [String] owner of table
+  # @return [Boolean] true if table exists in DB
+  def self.table_exists?(table_name, owner = PanoramaConnection.username)
+    PanoramaConnection.sql_select_one(["SELECT COUNT(*) FROM DBA_All_Tables WHERE Owner = ? AND Table_Name = ?", owner, table_name]) > 0
+  end
+
+  # Analog sql_select all, jedoch return ResultIterator mit each-Method
+  # liefert Objekt zur späteren Iteration per each, erst dann wird SQL-Select ausgeführt (jedesmal erneut)
+  # Parameter: sql = String mit Statement oder Array mit Statement und Bindevariablen
+  #            modifier = proc für Anwendung auf die fertige Row
+  def self.sql_select_iterator(sql, modifier: nil, query_name: 'sql_select_iterator', convert_tz: true)   # Parameter String mit SQL oder Array mit SQL und Bindevariablen
+    raise 'sql_select_iterator: modifier must be a Proc' if modifier && !modifier.is_a?(Proc)
+    raise 'sql_select_iterator: query_name must be a String' if !query_name.is_a?(String)
+
+    check_for_open_connection                                                   # ensure opened Oracle-connection
+    stmt, binds = sql_prepare_binds(PackLicense.filter_sql_for_pack_license(sql))   # Transform SQL and split SQL and binds
+    SqlSelectIterator.new(
+      stmt:           translate_sql(stmt),
+      binds:          binds,
+      modifier:       modifier,
+      query_name:     query_name,
+      convert_tz:     convert_tz
+    )      # kann per Aufruf von each die einzelnen Records liefern
+  end
+
+  # Helper fuer Ausführung SQL-Select-Query,
+  # Parameter: sql = String mit Statement oder Array mit Statement und Bindevariablen
+  #            modifier = proc für Anwendung auf die fertige Row
+  # return Array of Hash mit Columns des Records
+  def self.sql_select_all(sql, modifier: nil, query_name: 'sql_select_all', convert_tz: true)   # Parameter String mit SQL oder Array mit SQL und Bindevariablen
+    result = []
+    PanoramaConnection::sql_select_iterator(sql, modifier: modifier, query_name: query_name, convert_tz: convert_tz).each do |r|
+      result << r
+    end
+    result
+  end
+
+  # Select genau erste Zeile
+  def self.sql_select_first_row(sql, query_name: 'sql_select_first_row', convert_tz: true)
+    result = sql_select_all(sql, query_name: query_name, convert_tz: convert_tz)
+    return nil if result.empty?
+    result[0]     #.extend SelectHashHelper      # Erweitern Hash um Methodenzugriff auf Elemente
+  end
+
+  # Select genau einen Wert der ersten Zeile des Result
+  def self.sql_select_one(sql, query_name: 'sql_select_one', convert_tz: true)
+    result = sql_select_first_row(sql, query_name: query_name, convert_tz: convert_tz)
+    return nil unless result
+    result.first[1]           # Value des Key/Value-Tupels des ersten Elememtes im Hash
+  end
+
+  # Execute SQL statement
+  def self.sql_execute(sql, query_name = 'sql_execute')
+    # raise 'binds are not yet supported for sql_execute' if sql.class != String
+    stmt, binds = sql_prepare_binds(sql)   # Transform SQL and split SQL and binds
+    sql_execute_native(sql: stmt, binds: binds, query_name: query_name)
+  end
+
+  # Execute with direct AR binds
+  # Without query_timeout because long lasting ASH sampling is executed with this method
+  def self.sql_execute_native(sql:, binds:, query_name: 'sql_execute_native')
+    check_for_open_connection                                                   # ensure opened Oracle-connection
+    transformed_sql = PackLicense.filter_sql_for_pack_license(sql)  # Check for license violation and possible statement transformation
+    thread_connection.register_sql_execution(transformed_sql)
+    begin
+      get_connection.exec_update(transformed_sql, query_name, binds)
+    rescue Exception => e
+      if e.message['ORA-10632']
+        Rails.logger.error('PanoramaConnection.sql_execute_native') { "#{e.class}:#{e.message}! Retrying execution of SQL\n#{transformed_sql}" }
+        sleep(10)
+        # reexecute the SQL in case of ORA-10632: invalid rowid
+        # this can happen at CREATE TABLE with ENABLE ROW MOVEMENT, especially for 19.10 SE2
+        get_connection.exec_update(transformed_sql, query_name, binds)
+      else
+        raise
+      end
+    end
+  rescue Exception => e
+    PanoramaConnection.check_for_erroneous_connection_removal(e)                # check if too much errors occurred for this connection
+
+    bind_text = String.new
+    unless binds.nil?
+      binds.each do |b|
+        bind_text << "#{b.name} = #{b.value}\n"
+      end
+    end
+
+    # Ensure stacktrace of first exception is show
+    msg = "Error while executing SQL:\n#{PanoramaConnection.get_nested_exception_message(e)}\nSQL-Statement:\n#{transformed_sql}\n#{bind_text.length > 0 ? "Bind-Values:\n#{bind_text}" : ''}"
+    new_ex = Exception.new(msg)
+    new_ex.set_backtrace(e.backtrace)
+    raise new_ex
+  ensure
+    thread_connection&.unregister_sql_execution
+  end
+
+  # Execute a PL/SQL function that returns a CLOB, mind the missing semicolon at the end of the command
+  # @param function_call [String] the PL/SQL function call to execute, e.g. "DBMS_SQLDIAG.Report_SQL(SQL_ID => ?, Level => 'ALL')"
+  # @param binds [Array] the parameters to bind to the function call
+  # @return [String] the result of the function call as a String
+  def self.exec_clob_plsql_function(function_call, binds)
+    sql = "{ ? = call #{function_call} }";                                      # CallableStatement syntax for functions
+    thread_connection.register_sql_execution(sql)
+    cs = PanoramaConnection.get_jdbc_raw_connection.prepare_call(sql)
+    cs.register_out_parameter(1, java.sql.Types::CLOB);                         # Register the first parameter (return value) as an OUT parameter
+
+    binds.each_with_index do |bind, index|
+      self.bind_java_input_parameter(cs, index + 2, bind)                       # Set the input parameter, index + 2 because first is OUT parameter
+    end
+
+    cs.execute();
+    clob = cs.get_clob(1);                                                      # Result is of class oracle.sql.CLOB
+
+    reader = clob.get_character_stream                                          # oracle.jdbc.driver.OracleClobReader
+    br = java.io.BufferedReader.new(reader)                                     # Wrap in BufferedReader for efficiency
+    line = java.lang.String.new
+    result = String.new
+    while ((line = br.readLine()) != nil) do
+      result << line
+      result << "\n"
+    end
+    br.close
+    result
+  rescue Exception => e
+    Rails.logger.error('PanoramaConnection.exec_clob_plsql_function') { "Error '#{e.class} : #{e.message}' occurred" }
+    raise e
+  ensure
+    cs&.close
+    thread_connection&.unregister_sql_execution
+  end
+
+  # Execute anonymous PL/SQL code that returns its result by use of DBMS_OUTPUT, valid for rel. 19 ++
+  # @param code [String] the PL/SQL code to execute, e.g. "BEGIN DBMS_OUTPUT.PUT_LINE(?); END;"
+  # @param binds [Array] the parameters to bind to the function call
+  #   one bind as a Hash "{ java_type: "STRING", value: "some_value" }"
+  # @return [Array] the DBMS_OUTPUT result as array of strings
+  def self.exec_plsql_with_dbms_output_result(code, binds)
+    raise "PanoramaConnection.exec_plsql_with_dbms_output_result not supported for DB rel. < 19" if db_version < '19'
+    transformed_code = PackLicense.filter_sql_for_pack_license(code)  # Check for license violation and possible statement transformation
+    thread_connection.register_sql_execution(transformed_code)
+
+    self.sql_execute("BEGIN DBMS_OUTPUT.ENABLE(NULL); END;")
+
+    cs = PanoramaConnection.get_jdbc_raw_connection.prepare_call(transformed_code)
+
+    binds.each_with_index do |bind, index|
+      self.bind_java_input_parameter(cs, index + 1, bind)
+    end
+
+    cs.execute();
+
+    # read the DBMS_OUTPUT buffer now
+    ob_cs = PanoramaConnection.get_jdbc_raw_connection.prepare_call("BEGIN DBMS_OUTPUT.GET_LINES(?, ?); END;")
+    ob_cs.register_out_parameter(1, OracleTypes::ARRAY, "DBMS_OUTPUT.CHARARR");    # oracle.jdbc.OracleTypes::ARRAY needs to be imorted by java_import (no leading keyword "java" in class)
+    ob_cs.register_out_parameter(2, java.sql.Types::INTEGER);
+
+    result = []
+    bulk_size = 100
+    loop do
+      ob_cs.set_int(2, bulk_size)
+      ob_cs.execute();
+      lines = ob_cs.get_array(1).get_array.to_a
+      line_count = ob_cs.get_int(2)
+      result.concat(lines[0, line_count])
+      break if line_count < bulk_size                                                 # No more data to read
+    end
+
+    self.sql_execute("BEGIN DBMS_OUTPUT.DISABLE; END;")
+    result
+  rescue Exception => e
+    Rails.logger.error('PanoramaConnection.exec_plsql_with_dbms_output_result') { "Error '#{e.class} : #{e.message}' occurred at execution of:\n#{transformed_code}" }
+    raise e
+  ensure
+    cs&.close if defined? cs
+    ob_cs&.close if defined? ob_cs
+    thread_connection&.unregister_sql_execution
+  end
+
+  def self.commit                                                               # only relevant if autocommit is switched off
+    PanoramaConnection.get_connection.commit
+  end
+
+  def self.rollback
+    PanoramaConnection.get_connection.rollback                                  # only relevant if autocommit is switched off
+  end
+
+  # @return JDBC connection object
+  def self.get_connection
+    check_for_open_connection
+    thread_connection.jdbc_connection
+  end
+
+  def self.get_threadlocal_config
+
+    unless Thread.current[:panorama_connection_connect_info]
+      Rails.logger.error('PanoramaConnection.get_threadlocal_config') { "Thread.current[:panorama_connection_connect_info] does not exist" }
+      Rails.logger.error('PanoramaConnection.get_threadlocal_config') { "Stack trace:\n#{Thread.current.backtrace.join("\n")}" }
+      raise 'No current DB connect info set! Please reconnect to DB or restart Panorama in browser!'
+    end
+    Thread.current[:panorama_connection_connect_info]
+  end
+
+  def self.user_table_exists?(table_name)
+    self.sql_select_one(["SELECT COUNT(*) FROM User_Tables WHERE Table_Name = UPPER(?)", table_name]) > 0
+  end
+
+  private
+  # ensure that Oracle-Connection exists and DBMS__Application_Info is executed
+  # @param register_module_action [Boolean] true if dbms_application_info.set_module should be called
+  # @param retry_count [Integer] number of retries to get a connection, used to prevent endless loop in case of persistent problems
+  # @return [PanoramaConnection] the connection object for the current thread
+  # @raise [Exception] if no connection could be established after retry_count retries
+  def self.check_for_open_connection(register_module_action = true, retry_count: 0)
+    if thread_connection.nil?                # No JDBC-Connection allocated for thread
+      set_thread_connection(retrieve_from_pool_or_create_new_connection)
+    end
+
+    if register_module_action && Thread.current[:panorama_connection_app_info_set].nil?  # dbms_application_info not yet set in thread
+      begin
+        set_application_info
+      rescue Exception => e
+        destroy_connection
+        set_thread_connection(nil)
+        if retry_count < 1 || (e.class == Java::JavaSql::SQLRecoverableException && retry_count < 50)
+          Rails.logger.warn('PanoramaConnection.check_for_open_connection') { "Error #{e.class}:'#{e.message}'! Drop connection and look for next one from pool" }
+          check_for_open_connection(register_module_action, retry_count: retry_count + 1)
+        else
+          Rails.logger.error('PanoramaConnection.check_for_open_connection') { "Error #{e.class}:'#{e.message}'! Cancel getting new connection from pool after #{retry_count} retries" }
+          raise e
+        end
+      end
+      Thread.current[:panorama_connection_app_info_set] = true
+    end
+
+    # remember last used query timeout for usage in connection_terminate_job
+    thread_connection.last_used_query_timeout = get_threadlocal_config[:query_timeout]
+    thread_connection                                                           # Return connection object for current thread
+  end
+
+  # Test if connection should be closed after too many errors during SQL execution
+  # This should prevent from repeated usage of sessions with persisting problems like 'ORA-16000: database or pluggable database open for read-only access'
+  MAX_CONNECTION_SQL_ERRORS_BEFORE_CLOSE=10
+  def self.check_for_erroneous_connection_removal(exception)
+    immediate_destroy_reasons = [
+      'Closed Connection'
+    ]
+    conn = thread_connection
+    immediate_destroy_reasons.each do |reason|
+      if exception.message[reason]                                              # Exception message contains searched string
+        Rails.logger.error('PanoramaConnection.check_for_erroneous_connection_removal') { "DB-Connection '#{conn.sid},#{conn.serial_no}' immediately destroyed after SQL error because of '#{reason}' in exception message"}
+        PanoramaConnection.destroy_connection                                     # Force reconnect at next operation
+      end
+    end
+    conn.sql_errors_count =  conn.sql_errors_count + 1                          # remember the error during SQL
+    if conn.sql_errors_count > MAX_CONNECTION_SQL_ERRORS_BEFORE_CLOSE
+      Rails.logger.error('PanoramaConnection.check_for_erroneous_connection_removal') { "DB-Connection '#{conn.sid},#{conn.serial_no}' destroyed due to more than #{MAX_CONNECTION_SQL_ERRORS_BEFORE_CLOSE} SQL errors during this DB session"}
+      PanoramaConnection.destroy_connection                                     # Force reconnect at next operation
+    end
+  end
+
+  # get existing free connection from pool or create new connection
+  # @return [PanoramaConnection]
+  def self.retrieve_from_pool_or_create_new_connection
+    retval = nil
+    @@connection_pool_mutex.synchronize do
+      # Check if there is a free connection in pool
+      @@connection_pool.each do |conn|                                          # Iterate over connections in pool
+        connection_config = conn.get_config_from_jdbc_connection                   # Active JDBC connection config
+        if retval.nil? &&                                                       # Searched connection, not already in use
+            !conn.used_in_thread &&
+            connection_config[:url] == jdbc_thin_url &&
+            connection_config[:username] == get_threadlocal_config[:user] &&
+            conn.password_hash == get_decrypted_password.hash                   # Password must be equal to that used in pooled connection
+          Rails.logger.info "Using existing database connection from pool: URL='#{jdbc_thin_url}' User='#{get_threadlocal_config[:user]}' SID=#{conn.sid} Last used=#{conn.last_used_time} Pool size=#{@@connection_pool.count}"
+          conn.used_in_thread = true                                          # Mark as used in pool and leave loop
+          conn.last_used_time = Time.now                                      # Reset ast used time
+          retval = conn
+        end
+      end
+    end
+    # Create new connection if not found in pool
+    if retval.nil?
+      raise "Native ruby (RUBY_ENGINE=#{RUBY_ENGINE}) is no longer supported! Please use JRuby runtime environment! Call contact for support request if needed." if !defined?(RUBY_ENGINE) || RUBY_ENGINE != "jruby"
+      # Shrink connection pool / reuse connection from pool if size exceeds limit
+      retry_count = 0
+      while @@connection_pool.count >= Panorama::Application.config.max_connection_pool_size
+        # find oldest idle connection and free it
+        @@connection_pool_mutex.synchronize do
+          idle_conns =  @@connection_pool.select {|e| !e.used_in_thread }.sort { |a, b| a.last_used_time <=> b.last_used_time }
+          destroy_connection_in_mutexed_pool(idle_conns[0]) if !idle_conns.empty?               # Free oldest connection
+
+          if @@connection_pool.count >= Panorama::Application.config.max_connection_pool_size
+            if retry_count < 5
+              sleep_secs = [2 ** retry_count * 0.2, 10].min                      # Exponential backoff: 0.2, 0.4, 0.8, 1.6, 3.2 seconds, capped at 10
+              Rails.logger.info('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Maximum number of active concurrent database sessions for Panorama reached (#{Panorama::Application.config.max_connection_pool_size})!\nWaiting #{sleep_secs} seconds until retry." }
+              retry_count += 1
+              sleep sleep_secs
+            else
+              Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Maximum number of active concurrent database sessions for Panorama reached (#{Panorama::Application.config.max_connection_pool_size})!" }
+              dump_connection_pool_to_log
+              raise "Maximum number of active concurrent database sessions for Panorama exceeded (#{Panorama::Application.config.max_connection_pool_size})!\nPlease try again later."
+            end
+          end
+        end
+      end
+
+      begin
+        jdbc_connection = do_login
+        if get_threadlocal_config[:modus] == 'tns'
+          begin
+            PanoramaConnection.direct_select_one(jdbc_connection, "SELECT /* Panorama first connection test for tns */ SYSDATE FROM DUAL")    # Connect with TNS-Alias has second try if does not function
+          rescue Exception => e                                                   # Switch to host/port/sid instead
+            Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Error connecting to database in first try: URL='#{PanoramaConnection.jdbc_thin_url}' TNSName='#{get_threadlocal_config[:tns]}' User='#{get_threadlocal_config[:user]}'" }
+            Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "#{e.class.name} #{e.message}" }
+            ExceptionHelper.log_exception_backtrace(e, 30)
+
+            jdbc_connection.logoff if !jdbc_connection.nil?                     # close/free wrong connection
+            get_threadlocal_config[:modus] = 'host'
+            get_threadlocal_config[:tns]   = PanoramaConnection.get_host_tns(get_threadlocal_config)
+            Rails.logger.info "Second try to connect with host/port/sid instead of TNS-alias: URL='#{PanoramaConnection.jdbc_thin_url}' TNSName='#{get_threadlocal_config[:tns]}' User='#{get_threadlocal_config[:user]}'"
+            jdbc_connection = do_login
+            PanoramaConnection.direct_select_one(jdbc_connection, "SELECT /* Panorama second connection test for tns */ SYSDATE FROM DUAL")    # Connect with host/port/sid as second try if does not function
+          end
+        else
+          PanoramaConnection.direct_select_one(jdbc_connection, "SELECT /* Panorama connection test for host/port/sid */ SYSDATE FROM DUAL")      # Connect with host/port/sid should function at first try
+        end
+      rescue Exception => e
+        jdbc_connection.logoff if !jdbc_connection.nil?                     # close/free wrong connection
+        Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Error connecting to database in second try: URL='#{PanoramaConnection.jdbc_thin_url}' TNSName='#{get_threadlocal_config[:tns]}' User='#{get_threadlocal_config[:user]}'" }
+        Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "#{e.class.name} #{e.message}" }
+        ExceptionHelper.log_exception_backtrace(e, 30)
+        raise
+      end
+
+      retval = PanoramaConnection.new(jdbc_connection)
+
+      # prevent from ORA-12850: Could not allocate slaves on all specified instances: 2 needed, 1 allocated
+      # Parallel slave failing with ORA-12850 with parallel_degree_policy set to AUTO (Doc ID 2663486.1)
+      # Requested by Wolfgang Konz, 2021-05-21
+      parallel_degree_policy_stmt = "ALTER SESSION SET parallel_degree_policy = MANUAL"
+      begin
+        jdbc_connection.exec_update(parallel_degree_policy_stmt, 'set parallel_degree_policy', [])
+      rescue Exception => e
+        Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Error '#{e.message}' while setting parallel_degree_policy with '#{parallel_degree_policy_stmt}'" }
+      end
+
+      tz_stmt = "ALTER SESSION SET Time_Zone = '#{java.util.TimeZone.get_default.get_id}'"
+      begin
+        jdbc_connection.exec_update(tz_stmt, 'set timezone', [])
+      rescue Exception => e
+          Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Error '#{e.message}' while setting client timezone with '#{tz_stmt}'" }
+      end
+
+      if !Rails.env.production?
+        begin
+          jdbc_connection.exec_update("ALTER SESSION SET Statistics_Level = ALL", 'set statistics level')
+        rescue Exception => e
+          Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "Error '#{e.message}' while setting statistics level to ALL" }
+        end
+      end
+
+      begin
+        retval.read_initial_attributes
+      rescue Exception => e
+        jdbc_connection.logoff if !jdbc_connection.nil?                     # close/free wrong connection
+        Rails.logger.error('PanoramaConnection.retrieve_from_pool_or_create_new_connection') { "#{e.class.name} #{e.message}" }
+        ExceptionHelper.log_exception_backtrace(e, 20)
+        raise "Your user needs SELECT ANY DICTIONARY ( and SELECT_CATALOG_ROLE if autonomous DB) or equivalent rights to login to Panorama!\n\n\n#{e.class.name} #{e.message}"
+      end
+
+      # All checks succeeded, put in connection pool now
+      @@connection_pool_mutex.synchronize do
+        @@connection_pool << retval
+      end
+    end
+    retval
+  end
+
+  def self.get_decrypted_password
+    decrypted_password = Encryption.decrypt_value(get_threadlocal_config[:password], get_threadlocal_config[:client_salt])
+    raise "PanoramaConnection.get_decrypted_password: Result = nil after decryption" if decrypted_password.nil?
+    decrypted_password
+  rescue Exception => e
+    output = "Stack-Trace for #{e.class}:#{e.message}\n"
+    e.backtrace.each {|bt| output << "#{bt}\n" }
+    output << "--- end of stacktrace ---\n\n\n"
+    Rails.logger.warn('PanoramaConnection.get_decrypted_password') { output }
+
+    msg = "Error in PanoramaConnection.get_decrypted_password decrypting password: #{e.class} #{e.message}"
+    raise "One part of encryption key for stored password has changed at server side!\nPlease connect again with full connection info including username and password.\n\n#{msg}"
+  end
+
+  def self.do_login
+    if (!ENV['TNS_ADMIN'] || ENV['TNS_ADMIN'] == '') && ENV['ORACLE_HOME'] && ENV['ORACLE_HOME'] != ''
+      # tnsadmin = "#{ENV['ORACLE_HOME']}/network/admin" is not yet supported by Oracle_Enhanced-Adapter so we must ensure ourself that oracle.net.tns_admin is set
+      # Otherwise JDBC-Error is raised when connecting with TNS-Alias: java.sql.SQLRecoverableException: I/O-Error: Unknown host specified
+      if !java.lang.System.get_property("oracle.net.tns_admin") || java.lang.System.get_property("oracle.net.tns_admin") == ''
+        java.lang.System.set_property("oracle.net.tns_admin", "#{ENV['ORACLE_HOME']}/network/admin")
+      end
+    end
+
+    url           = jdbc_thin_url
+    username      = get_threadlocal_config[:user]
+    password      = get_decrypted_password
+    privilege     = get_threadlocal_config[:privilege]
+    query_timeout = get_threadlocal_config[:query_timeout]
+    if query_timeout.nil?
+      Rails.logger.info('PanoramaConnection.do_login') { "query_timeout not set in thread, assuming default value = 300" }
+      query_timeout = 300
+    end
+
+    raise "PanoramaConnection.do_login: url missing"            if  url.nil?
+    raise "PanoramaConnection.do_login: username missing"       if  username.nil?
+    raise "PanoramaConnection.do_login: password missing"       if  password.nil?
+    privilege = 'normal'                                        if  privilege.nil?
+    Rails.logger.debug('PanoramaConnection.do_login') { "Connecting to database: URL='#{url}' User='#{username}'   Privilege='#{privilege}'" }
+    jdbc_connection = ActiveRecord::ConnectionAdapters::OracleEnhanced::JDBCConnection.new(
+        adapter:          "oracle_enhanced",
+        driver:           "oracle.jdbc.driver.OracleDriver",
+        url:              url,
+        username:         username,
+        password:         password,
+        privilege:        privilege,
+        cursor_sharing:  :exact,                                                # oracle_enhanced_adapter setzt cursor_sharing per Default auf force
+        jdbc_connect_properties: {                                              # Needs acceptance of Pull-request for oracle_enhanced_adapter: https://github.com/rsim/oracle-enhanced/pull/2284
+          'oracle.net.encryption_client'      => 'REQUESTED',
+          'oracle.net.crypto_checksum_client' => 'REQUESTED'
+        }
+    )
+    Rails.logger.info('PanoramaConnection.do_login') { "New database connection created: URL='#{jdbc_thin_url}' User='#{get_threadlocal_config[:user]}' Pool size=#{@@connection_pool.count+1}" }
+
+    # Schedule socket timeout to cancel connection in case of network stuck after twice of query timeout
+    jdbc_connection.raw_connection.setNetworkTimeout(java.util.concurrent.Executors.newSingleThreadExecutor, query_timeout*2*1000);
+
+    # Allow Oracle JDBC driver to cache cursors
+    jdbc_connection.raw_connection.setImplicitCachingEnabled(true)
+
+    # hold up to 100 cursors open
+    jdbc_connection.raw_connection.setStatementCacheSize(100)
+
+    jdbc_connection
+  rescue Exception => e
+    Rails.logger.error('PanoramaConnection.do_login') { "Exception #{e.class}:#{e.message} while connecting to URL='#{url}', user='#{username}'" }
+    raise
+  end
+
+  def self.dump_connection_pool_to_log
+    pos = 0
+    Rails.logger.info "Connection pool contains #{@@connection_pool.count} entries:"
+    @@connection_pool.each do |conn|
+      config = conn.get_config_from_jdbc_connection
+      Rails.logger.info "#{pos}: URL = '#{config[:url]}' User = '#{config[:username]}' Last used = '#{conn.last_used_time}' Used in thread = #{conn.used_in_thread}"
+      pos += 1
+    end
+  end
+
+  def self.set_application_info
+    # This method raises connection exception at first database access
+    thread_connection.set_module_action("#{get_threadlocal_config[:current_controller_name]}/#{get_threadlocal_config[:current_action_name]}")
+  end
+
+  # Translate text in SQL-statement
+  def self.translate_sql(stmt)
+    stmt = stmt.dup                                                             # Unfreeze SQL-Statement, so that it can be modified
+    stmt.gsub!(/\n[ \n]*\n/, "\n")                                              # Remove empty lines in SQL-text
+    stmt
+  end
+
+  # Bind an input parameter in JDBC
+  # @param statement [PreparedStatement | CallableStatement] the statement handle
+  # @param index [Integer] the index to bind
+  # @param bind [Any] the value to bind
+  # @return [void]
+  def self.bind_java_input_parameter(statement, index, bind)
+    if bind.is_a?(String)
+      statement.set_string(index, bind)
+    elsif bind.is_a?(Numeric)
+      statement.set_int(index, bind)
+    elsif bind.is_a?(Date) || bind.is_a?(Time) || bind.is_a?(DateTime)
+      statement.set_date(index, java.sql.Date.value_of(bind))
+    else
+      raise ArgumentError, "PanoramaConnection.bind_java_input_parameter: Unsupported java_type for Ruby class: #{bind.class}"
+    end
+  end
+
+  # Execute select direct on JDBC-Connection with logging
+  def self.direct_select(jdbc_connection, sql)
+    retval = nil
+    ActiveSupport::Notifications.instrumenter.instrument(
+        "sql.active_record",
+        :sql            => sql,
+        :name           => 'direct_select_one',
+        :connection_id  => object_id,
+        :statement_name => nil,
+        :binds          => []) do
+      retval = jdbc_connection.select sql
+    end
+    retval
+  rescue Exception => e
+    raise "Error '#{e.class}:#{e.message}' executing SQL: #{sql}"
+  end
+
+  def self.direct_select_one(jdbc_connection, sql)
+    PanoramaConnection.direct_select(jdbc_connection, sql)&.first
+  end
+
+  class SqlSelectIterator
+
+    # Remember this parameters for execution at method each
+    # stmt - SQL-String
+    # binds - Parameter-Array
+    def initialize(stmt:,
+                   binds:,
+                   modifier: nil,
+                   query_timeout: PanoramaConnection.get_threadlocal_config[:query_timeout],
+                   query_name: 'SqlSelectIterator',
+                   convert_tz: true
+    )
+      @stmt           = stmt
+      @binds          = binds
+      @modifier       = modifier              # proc for modifikation of record
+      @query_timeout  = query_timeout
+      @query_name     = query_name
+      @convert_tz     = convert_tz            # Convert time zone of date/time values to client time zone
+    end
+
+    def each(&block)
+      # Execute SQL and call block for every record of result
+      PanoramaConnection.thread_connection.register_sql_execution(@stmt)    # Allows to show SQL in usage/connection_pool
+
+      type_casted_binds = @binds.map do |attr|
+        # attr.value_for_database.type should be only the default ActiveRecord::Type::Value
+        # especially using ActiveRecord::Type::Time::Value will only bind the time and not the date
+        casted_value = TypeMapper.new.type_cast(attr.value_for_database)
+        Rails.logger.debug('SqlSelectIterator.each') { "Prepare bind: value ='#{attr.value}' of class #{attr.value.class}, type-casted value = '#{casted_value}' of class #{casted_value.class}" }
+        casted_value
+      end
+
+      PanoramaConnection.thread_connection.jdbc_connection.iterate_query(@stmt,
+                                                                                           name: @query_name,
+                                                                                           binds: @binds,
+                                                                                           type_casted_binds: type_casted_binds,
+                                                                                           modifier: @modifier,
+                                                                                           query_timeout: @query_timeout,
+                                                                                           convert_tz: @convert_tz,
+                                                                                           &block
+      )
+    rescue Exception => e
+      PanoramaConnection.check_for_erroneous_connection_removal(e)              # check if too much errors occurred for this connection
+
+      bind_text = String.new
+      @binds.each_with_index do |b, index|
+        bind_text << "#{b.name}: value ='#{b.value}' of class #{b.value.class}, type-casted value = '#{type_casted_binds[index]}' of class #{type_casted_binds[index].class}\n"
+      end
+
+      # Ensure stacktrace of first exception is show
+      msg = "Error while executing SQL:\n#{PanoramaConnection.get_nested_exception_message(e)}\nSQL-Statement:\n#{@stmt}\n#{bind_text.length > 0 ? "Bind-Values:\n#{bind_text}" : ''}"
+      Rails.logger.error('SqlSelectIterator.each') { msg }
+      new_ex = Exception.new(msg)
+      new_ex.set_backtrace(e.backtrace)
+      raise new_ex
+    ensure
+      PanoramaConnection.thread_connection&.unregister_sql_execution   # free current SQL info for usage/connection_pool
+    end
+
+  end
+
+end

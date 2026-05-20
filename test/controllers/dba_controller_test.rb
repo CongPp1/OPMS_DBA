@@ -1,0 +1,311 @@
+# encoding: utf-8
+require 'test_helper'
+include ActionView::Helpers::TranslationHelper
+#include ActionDispatch::Http::URL
+
+class DbaControllerTest < ActionDispatch::IntegrationTest
+
+  setup do
+    #@routes = Engine.routes         # Suppress routing error if only routes for dummy application are active
+    set_session_test_db_context
+
+    if !defined? @sga_sql_id
+      sql_row = sql_select_first_row "SELECT SQL_ID, Child_Number FROM v$sql WHERE SQL_Text LIKE '%seg$%' AND Object_Status = 'VALID' ORDER BY Executions DESC, First_Load_Time"
+      raise "DbaControllerTest.setup: No SQL found for test" if sql_row.nil?
+      @sga_sql_id = sql_row.sql_id
+      @sga_child_number = sql_row.child_number
+    end
+
+    initialize_min_max_snap_id_and_times
+    @autonomous = PanoramaConnection.autonomous_database?
+  end
+
+  # Alle Menu-Einträge testen für die der Controller eine Action definiert hat
+  test "test_controllers_menu_entries_with_actions with xhr: true" do
+    assert_nothing_raised do
+      call_controllers_menu_entries_with_actions
+    end
+  end
+
+
+  test "redologs with xhr: true"       do
+    instance  = PanoramaConnection.instance_number
+
+    post  '/dba/show_redologs', :params => {:format=>:html, :update_area=>:hugo, instance: instance }
+    assert_response :success
+
+    post  '/dba/list_redolog_members', :params => {:format=>:html, :update_area=>:hugo, instance: instance, group: 1 }
+    assert_response :success
+
+    [:single, :second, :second_10, :minute, :minute_10, :hour, :day, :week].each do |time_groupby|
+      post '/dba/list_redologs_log_history', :params => {:format=>:html,  :time_selection_start =>@time_selection_start, :time_selection_end =>@time_selection_end, time_groupby: time_groupby, :update_area=>:hugo }
+      assert_response :success
+    end
+    post '/dba/list_redologs_log_history', :params => {:format=>:html,  :time_selection_start =>@time_selection_start, :time_selection_end =>@time_selection_end, time_groupby: :single, instance: instance, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_redologs_log_history', :params => {:format=>:html,  :time_selection_start =>@time_selection_start, :time_selection_end =>@time_selection_end, time_groupby: :single, instance: instance, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_redologs_historic', :params => {:format=>:html,  :time_selection_start =>@time_selection_start, :time_selection_end =>@time_selection_end, :update_area=>:hugo }
+    assert_response management_pack_license == :none ? :error : :success
+    post '/dba/list_redologs_historic', :params => {:format=>:html,  :time_selection_start =>@time_selection_start, :time_selection_end =>@time_selection_end, :instance=>instance, :update_area=>:hugo }
+    assert_response management_pack_license == :none ? :error : :success
+  end
+
+  test "locks with xhr: true"       do
+    DBA_KGLLOCK_exists = sql_select_one("select COUNT(*) from dba_views where view_name='DBA_KGLLOCK' ")
+
+    post '/dba/list_dml_locks', :params => {:format=>:html }
+    assert_response :success
+
+    if DBA_KGLLOCK_exists > 0      # Nur Testen wenn View auch existiert
+      post '/dba/list_ddl_locks', params: {format: :html}
+      assert_response :success
+    end
+
+    post '/dba/list_blocking_dml_locks', :params => {:format=>:html, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_pending_two_phase_commits', :params => {:format=>:html, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_2pc_neighbors', :params => {:format=>:html, local_tran_id: '100', :update_area=>:hugo }
+    assert_response :success
+
+  end
+
+  test "list_sessions with xhr: true" do
+    instance  = PanoramaConnection.instance_number
+
+    post '/dba/list_sessions', :params => {:format=>:html, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_sessions', :params => {:format=>:html, :onlyActive=>1, :showOnlyUser=>1, :instance=>instance, :filter=>'hugo', :object_owner=>'SYS', :object_name=>'HUGO', :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_sessions', :params => {:format=>:html, :onlyActive=>1, :showOnlyUser=>1, :instance=>instance, :filter=>'hugo', :object_owner=>'SYS', :object_name=>'HUGO', object_type: 'TABLE', :update_area=>:hugo }
+    assert_response :success
+  end
+
+  test "show_session_detail with xhr: true" do
+    dbid      = PanoramaConnection.login_container_dbid
+    instance  = PanoramaConnection.instance_number
+    pid       = PanoramaConnection.pid
+    saddr     = PanoramaConnection.saddr
+    sid       = PanoramaConnection.sid
+    serial_no = PanoramaConnection.serial_no
+
+    get  '/dba/show_session_detail', :params => {:format=>:html, :instance=>instance, :sid=>sid, :serial_no=>serial_no, :update_area=>:hugo }
+    assert_response :success
+
+    # Access on gv$Diag_Trace_File in autonomous DB leads cancels the connection
+    if get_db_version >= '12.2' && !@autonomous
+      post  '/dba/render_session_detail_tracefile_button', :params => {:format=>:html, :instance=>instance, tracefile: 'hugo', logon_time: localeDateTime(Time.now-1000), now_time: localeDateTime(Time.now), :update_area=>:hugo }
+      assert_response :success
+    end
+
+    post  '/dba/render_session_detail_sql_monitor', params: {format: :html, dbid: dbid, instance: instance, sid: sid, serial_no: serial_no, time_selection_start: localeDateTime(Time.now-200, :minutes), time_selection_end: localeDateTime(Time.now, :minutes), :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/show_session_details_waits', :params => {:format=>:html, :instance=>instance, :sid=>sid, :serial_no=>serial_no, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/show_session_details_locks', :params => {:format=>:html, :instance=>instance, :sid=>sid, :serial_no=>serial_no, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/show_session_details_temp', :params => {:format=>:html, :instance=>instance, :sid=>sid, :serial_no=>serial_no, :saddr=>saddr, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_open_cursor_per_session', :params => {:format=>:html, :instance=>instance, :sid=>sid, :serial_no=>serial_no, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_accessed_objects', :params => {:format=>:html, :instance=>instance, :sid=>sid, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_session_statistic', :params => {:format=>:html, :instance=>instance, :sid=>sid, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/list_session_optimizer_environment', :params => {:format=>:html, :instance=>instance, :sid=>sid, :update_area=>:hugo }
+    assert_response :success
+
+    post '/dba/show_session_details_waits_object', :params => {:format=>:html, :event=>"db file sequential read", :update_area=>:hugo }
+    assert_response :success
+  end
+
+  test "show_session_waits with xhr: true" do
+    get  '/dba/show_session_waits', :params => {:format=>:html, :update_area=>:hugo }
+    assert_response :success
+    #test "show_application" do get  :show_application, :applexec_id => "0";  assert_response :success; end
+  end
+
+  test "list_waits_per_event with xhr: true" do
+    instance  = PanoramaConnection.instance_number
+    get '/dba/list_waits_per_event', :params => {:format=>:html, :event=>"db file sequential read", :instance=>instance, :update_area=>"hugo" }
+    assert_response :success
+  end
+
+  test "segment_stat with xhr: true"       do
+    assert_nothing_raised do
+      if get_db_version >= '18'
+        post '/dba/list_segment_statistics', params: { format: :html, update_area: :hugo, sample_length: 5 }
+        assert_response :success
+
+        post '/dba/list_segment_statistics', params: { format: :html, update_area: :hugo, sample_length: 5, instance: 1 }
+        assert_response :success
+
+        post '/dba/list_segment_statistics', params: { format: :html, update_area: :hugo, sample_length: 5, show_partition_info: 1 }
+        assert_response :success
+      end
+    end
+  end
+
+  test "list_server_logs with xhr: true" do
+    assert_nothing_raised do
+      # Access cancels the DB session in autonomous DB
+      unless PanoramaConnection.autonomous_database?
+        [
+          {tag: 'SS',   log_type: 'all',      button: :group,   filter: nil},
+          {tag: 'MI',   log_type: 'tnslsnr',  button: :detail,  filter: 'hugo' },
+          {tag: 'HH24', log_type: 'rdbms',    button: :group,   filter: 'erster|zweiter' },
+          {tag: 'DD',   log_type: 'asm',      button: :detail,  filter: nil }
+        ].each do |variant|
+          post '/dba/list_server_logs', :params => {format:               :html,
+                                                    time_selection_start: @time_selection_start,
+                                                    time_selection_end:   @time_selection_end,
+                                                    log_type:             variant[:log_type],
+                                                    verdichtung:          {tag: variant[:tag]},
+                                                    button:               variant[:button],
+                                                    incl_filter:          variant[:filter],
+                                                    excl_filter:          variant[:filter],
+                                                    :update_area          => :hugo
+          }
+          assert_response(:success)
+        end
+      end
+    end
+  end
+
+  test 'show_rowid_details with xhr: true' do
+
+    # Readable table with primary key and records
+    data_object = sql_select_first_row "\
+      SELECT *
+      FROM   (SELECT o.Data_Object_ID, t.Owner, t.Table_Name
+              FROM   All_Tables t
+              JOIN   All_Constraints c ON c.Owner = t.Owner AND c.Table_Name = t.Table_Name AND c.Constraint_Type = 'P'
+              JOIN   DBA_Objects o ON o.Owner = t.Owner AND o.Object_Name = t.Table_Name
+              WHERE  t.Cluster_Name IS NULL
+              AND    t.IOT_Name IS NULL
+              --AND    t.Table_Name NOT LIKE '%$%'
+              --AND    t.Table_Name NOT LIKE '%DBMS%'
+              --AND    t.Table_Name NOT LIKE 'REPL%'
+              --AND    t.Table_Name NOT LIKE 'SYS%'
+              AND    NVL(t.Num_Rows, 1) > 0 -- Show also tables without analysis, e.g. for 11.2
+              AND    o.Data_Object_ID IS NOT NULL
+              AND    c.Index_Name IS NOT NULL
+              AND   (t.Owner, t.Table_Name) IN (SELECT Table_schema, Table_Name FROM ALl_Tab_Privs WHERE Privilege IN ('READ', 'SELECT') AND Grantee = 'PUBLIC')
+              ORDER BY t.Num_Rows DESC NULLS LAST
+            )
+            WHERE  RowNum < 2
+    "
+
+    raise "No readable table with num_rows > 0 found in database" if data_object.nil?
+
+    waitingforrowid = sql_select_one "SELECT RowIDTOChar(RowID) FROM #{data_object.owner}.#{data_object.table_name} WHERE RowNum < 2"
+
+    post '/dba/show_rowid_details', :params => {format: :html, data_object_id: data_object.data_object_id, waitingforrowid: waitingforrowid, update_area: :hugo }
+    assert_response :success
+
+  end
+
+  test 'trace_files with xhr: true' do
+    assert_nothing_raised do
+      # Access on trace files leads to hours of runtime in autonomous DBK
+      if get_db_version >= '12.2' && !PanoramaConnection.autonomous_database?
+        instance  = PanoramaConnection.instance_number
+        trace_file = nil
+        trace_file = sql_select_first_row "SELECT Inst_ID, ADR_Home, Trace_Filename, Con_ID FROM gv$Diag_Trace_File"
+
+        [nil, 'hugo', 'erster|zweiter'].each do |filter|
+          post '/dba/list_trace_files', :params => {format:               :html,
+                                                    time_selection_start: @time_selection_start,
+                                                    time_selection_end:   @time_selection_end,
+                                                    filename_incl_filter: filter,
+                                                    filename_excl_filter: filter,
+                                                    content_incl_filter:  filter,
+                                                    content_excl_filter:  filter,
+                                                    update_area:          :hugo
+          }
+          assert_response :success
+
+          if !trace_file.nil?
+            [0,1].each do |dont_show_sys|
+              [0,1].each do |dont_show_stat|
+                post '/dba/list_trace_file_content', params: {format: :html, instance: trace_file.inst_id, adr_home: trace_file.adr_home,
+                                                              trace_filename: trace_file.trace_filename, con_id: trace_file.con_id,
+                                                              time_selection_start: @time_selection_start,
+                                                              time_selection_end:   @time_selection_end,
+                                                              dont_show_sys: dont_show_sys, dont_show_stat: dont_show_stat,
+                                                              max_trace_file_lines_to_show: 100,
+                                                              first_or_last_lines: dont_show_sys==0 ? 'first' : 'last',
+                                                              update_area: :hugo }
+                assert_response :success
+              end
+            end
+          end
+
+          post '/dba/list_trace_file_content', params: {format: :html, instance: instance, adr_home: 'hugo', trace_filename: 'hugo',
+                                                        time_selection_start: @time_selection_start,
+                                                        time_selection_end:   @time_selection_end,
+                                                        con_id: 1, update_area: :hugo }
+          assert_response :success
+        end
+      end
+    end
+  end
+
+  test "refresh_dashboard_ash with xhr: true" do
+    session_statistics_key_rules.each do |key, sskr|
+      instance = rand(0..1)
+      instance = nil if instance == 0
+      if rand(0..1) == 0
+        last_refresh_time_string = nil
+        smallest_timestamp_ms = nil
+      else
+        last_refresh_time_string = Time.now.strftime('%Y/%m/%d %H:%M:%S')
+        smallest_timestamp_ms = 1698157539000
+      end
+      post '/dba/refresh_dashboard_ash', :params => {:format=>:html, :update_area=>:hugo, instance: instance, hours_to_cover: 0.5, groupby: key, topx: 10, last_refresh_time_string: last_refresh_time_string, smallest_timestamp_ms: smallest_timestamp_ms, window_width: 1024 }
+      assert_response management_pack_license == :none ? :error : :success, log_on_failure("refresh_dashboard_ash failed for key #{key} and instance #{instance}")
+    end
+  end
+
+  test "optimizer_parse_trace with xhr: true" do
+    assert_nothing_raised do
+      # DBMS_SQLDIAG.DUMP_TRACE requires Oracle >= 12.2 and access on gv$Diag_Trace_File_Contents
+      # Access on trace files is not possible on autonomous DBs
+      if get_db_version >= '12.2' && !PanoramaConnection.autonomous_database?
+        # Get a valid SQL-ID and child_number from the SGA
+        post '/dba/optimizer_parse_trace', params: { format:       :html,
+                                                     sql_id:       @sga_sql_id,
+                                                     child_number: @sga_child_number,
+                                                     update_area:  :hugo
+        }
+        if @response.body['ORA-01031']
+          Rails.logger.debug('DBAControllerTest.optimizer_parse_trace') { "No access to DBMS_SQLDIAG.DUMP_TRACE, cannot test optimizer_parse_trace" }
+        else
+          assert_response :success
+        end
+      end
+    end
+  end
+
+  test "scheduler_autoruns with xhr: true" do
+    post '/dba/list_dba_autotask_job_runs', :params => {format: :html, update_area: :hugo, client_name: 'auto optimizer stats collection' }
+    assert_response :success
+
+    post '/dba/list_dba_scheduler_window_groups', :params => {format: :html, update_area: :hugo, window_group: 'ORA$AT_WGRP_OS' }
+    assert_response :success
+  end
+end

@@ -1,0 +1,136 @@
+<%
+  @update_area = get_unique_area_id
+
+  show_event = proc do |rec|
+    rec.state == 'WAITING' ? rec.event : 'ON CPU'
+  end
+
+  show_event_data_title = proc do |rec|
+    result = "%t\n".dup
+    result << "Sessions is currently working on CPU. Last wait event was:\n#{rec.event}\n\nExplanation of last wait event is:\n" if rec.state != 'WAITING'
+    result << explain_wait_event(rec.event)
+    result
+  end
+
+  show_class = proc do |rec|
+    rec.state == 'WAITING' ? rec.wait_class : 'ON CPU'
+  end
+
+  show_class_data_title = proc do |rec|
+    result = "%t\n".dup
+    result << "Sessions is currently working on CPU. Last wait class was:\n#{rec.wait_class}" if rec.state != 'WAITING'
+    result
+  end
+
+  param_title = "Parameter of wait event (for last event if currently ON CPU)"
+
+  link_tx_id = proc do |rec|
+    ajax_link(rec.tx_id, {
+      controller: :storage,
+      action:     :list_undo_transactions,
+      instance:   @instance,
+      sid:        @sid,
+      serial_no:   @serial_no,
+      update_area:@update_area
+    },
+              :title=> "Show transaction details")
+  end
+
+  tx_id_data_title = proc do |rec|
+    if rec.tx_id
+      "%t\nStart time of transaction = #{localeDateTime(rec.tx_start_time)}"
+    else
+      "%t"
+    end
+  end
+
+  link_entry_plsql = proc do |rec|
+    link_object_description(@update_area,
+                            rec.peo_owner,
+                            rec.peo_object_name,
+                            "#{rec.peo_object_type} #{rec.peo_owner}#{'.' if rec.peo_owner}#{rec.peo_object_name}#{'.' if rec.peo_procedure_name}#{rec.peo_procedure_name}",
+                            rec.peo_object_type
+    )
+  end
+
+  link_plsql = proc do |rec|
+    link_object_description(@update_area,
+                            rec.po_owner,
+                            rec.po_object_name,
+                            "#{rec.po_object_type} #{rec.po_owner}#{'.' if rec.po_owner}#{rec.po_object_name}#{'.' if rec.po_procedure_name}#{rec.po_procedure_name}",
+                            rec.po_object_type
+    )
+  end
+
+  link_object = proc do |rec|
+    link_object_description(@update_area, rec.owner, rec.object_name,
+                            "#{rec.owner}#{'.' if rec.owner}#{rec.object_name}#{" (#{rec.subobject_name})" if rec.subobject_name}",
+                            rec.object_type
+    )
+  end
+
+  link_file_block_row = proc do |rec|
+    ajax_link("File#=#{rec.row_wait_file_no}, Block#=#{rec.row_wait_block_no}, Row#=#{rec.row_wait_row_no}",
+              { controller:         :dba,
+                action:             :convert_to_rowid,
+                update_area:        "row_#{@update_area}",
+                data_object_id:     rec.data_object_id,
+                row_wait_file_no:   rec.row_wait_file_no,
+                row_wait_block_no:  rec.row_wait_block_no,
+                row_wait_row_no:    rec.row_wait_row_no
+              },
+              :title=>t(:dba_list_dml_locks_link_column_blocking_object_hint, :default=>"Determine associated rowid")
+    )+"<div id=\"row_#{@update_area}\"></div>".html_safe
+  end
+
+  column_options =
+  [
+    {:caption=>"Wait Event",       :data=>show_event,                                         :title=>"Wait event", :data_title=>show_event_data_title},
+    {:caption=>"Parameter",        :data=>proc{|rec| link_wait_params(@instance, rec.event, rec.p1, rec.p1text, rec.p1raw, rec.p2, rec.p2text, rec.p2raw, rec.p3, rec.p3text, rec.p3raw, "#{@update_area}_#{@instance}_#{@sid}", @update_area) }, :title=>param_title},
+    {:caption=>"Wait Class",       :data=>show_class,                                         :title=>"Wait class", data_title: show_class_data_title},
+    {:caption=>"Wait time (ms)",   :data=>proc{|rec| fn(rec.wait_time_ms)},                   :title=>"Milliseconds in current wait event", data_title: proc{|rec| "%t\n#{seconds_explain(rec.wait_time_ms.to_f/1000)}"}, :align=>:right},
+    {:caption=>"State",            :data=>proc{|rec| rec.state},                              :title=>"Status", :data_title=>proc{|rec| explain_wait_state(rec.state)}},
+    {caption: 'Blocking session',   data: proc{|rec| link_session_details(@update_area, rec.blocking_instance, rec.blocking_session, rec.blocking_serial_no)}, title: 'Session that is blocking this session', data_title: proc{|rec| "%t\n\nBlocking session status = #{rec.blocking_session_status}"}},
+    {caption: 'Final blocking session', data: proc{|rec| link_session_details(@update_area, rec.final_blocking_instance, rec.final_blocking_session, rec.final_blocking_serial_no)}, title: 'Final session on top of dependency tree that is blocking this session', data_title: proc{|rec| "%t\n\nFinal blocking session status = #{rec.final_blocking_session_status}"}},
+    {caption: "Tx. ID",             data: link_tx_id,                                       title: "Transaction-ID if session has an active transaction", data_title: tx_id_data_title},
+    {caption: "SQL ID",             data: proc{|rec| link_sql_id(@update_area, @instance, rec.sql_id, childno: rec.sql_child_number)}, title: "Currently executed SQL ID"},
+    {caption: "SQL exec ID",        data: proc{|rec| fn(rec.sql_exec_id)},                  title: "SQL execution ID", align: :right},
+    {caption: "SQL exec start",     data: proc{|rec| localeDateTime(rec.sql_exec_start)},   title: "Time when the execution of the SQL currently executed by this session started"},
+    {caption: "Entry PL/SQL",       data: link_entry_plsql,                                 title: "Top-most PL/SQL subprogram on the stack"},
+    {caption: "PL/SQL",             data: link_plsql,                                       title: "Currently executing PL/SQL subprogram"},
+    {caption: "Module",             data: proc{|rec| rec.module},                           title: "Current module info"},
+    {caption: "Action",             data: proc{|rec| rec.action},                           title: "Current action info"},
+    {caption: "DB object",          data: link_object,                                      title: "Currently accessed database object", data_title: proc{|rec| "%t\n\nObject type = #{rec.object_type}"}},
+    {caption: "File / block / row", data: link_file_block_row,                              title: "File, block and row number of currently accessed database object"},
+  ]
+
+%>
+<div>
+  <%= gen_slickgrid(@waits, column_options, :caption => "Current wait status for instance=#{@instance}, SID=#{@sid}", :width=>:auto, show_pin_icon: 2) %>
+</div>
+
+
+<% if @pq_waits.length > 0 %>
+  <%
+    column_options =
+    [
+      {:caption=>"PQ-Slave",         :data=>proc{|rec| rec.program},                            :title=>"Program name of PQ-slave"},
+      {:caption=>"I",                :data=>proc{|rec| rec.inst_id},                            :title=>"Instance of PQ-slave"},
+      {:caption=>"SID / Serial#",    :data=>proc{|rec| link_session_details(@update_area, rec.inst_id, rec.sid, rec.serial_no)}, :title=>"Session-ID and serial number of PQ-slave session"},
+      {:caption=>"Req",              :data=>proc{|rec| rec.req_degree},                         :title=>"Requested PQ-degree", :align=>:right},
+      {:caption=>"Dgr",              :data=>proc{|rec| rec.degree},                             :title=>"Real PQ-degree", :align=>:right},
+      {:caption=>"Wait Event",       :data=>show_event,                                         :title=>"Wait event", :data_title=>show_event_data_title },
+      {:caption=>"Parameter",        :data=>proc{|rec| link_wait_params(rec.inst_id, rec.event, rec.p1, rec.p1text, rec.p1raw,  rec.p2, rec.p2text, rec.p2raw, rec.p3, rec.p3text, rec.p3raw, "#{@update_area}_#{rec.inst_id}_#{rec.sid}", @update_area) }, :title=>param_title},
+      {:caption=>"Wait Class",       :data=>show_class,                                         :title=>"Wait class", data_title: show_class_data_title},
+      {:caption=>"Wait time (ms)",   :data=>proc{|rec| fn(rec.wait_time_ms)},                   :title=>"Milliseconds in current wait event", data_title: proc{|rec| "%t\n#{seconds_explain(rec.wait_time_ms.to_f/1000)}"}, :align=>:right},
+      {:caption=>"State",            :data=>proc{|rec| rec.state},                              :title=>"Status", :data_title=>proc{|rec| explain_wait_state(rec.state)}},
+      {caption: 'Blocking session',   data: proc{|rec| link_session_details(@update_area, rec.blocking_instance, rec.blocking_session, rec.blocking_serial_no)}, title: 'Session that is blocking this session', data_title: proc{|rec| "%t\n\nBlocking session status = #{rec.blocking_session_status}"}},
+      {caption: 'Final blocking session', data: proc{|rec| link_session_details(@update_area, rec.final_blocking_instance, rec.final_blocking_session, rec.final_blocking_serial_no)}, title: 'Final session on top of dependency tree that is blocking this session', data_title: proc{|rec| "%t\n\nFinal blocking session status = #{rec.final_blocking_session_status}"}},
+    ]
+  %>
+  <div>
+    <%= gen_slickgrid(@pq_waits, column_options,{:caption=>"Parallel query slave processes", max_height: 450, :width=>:auto, show_pin_icon: 2}) %>
+  </div>
+<% end %>
+
+<div id="<%= @update_area %>"></div>

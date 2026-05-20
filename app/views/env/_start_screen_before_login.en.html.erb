@@ -1,0 +1,88 @@
+<h1>OPMS-DBA</h1>
+
+<h3>
+  Oracle Performance Monitoring System for Database Administrators and Developers
+</h3>
+
+<b>
+  Main Features:
+  <ul>
+    <li>Real-time Oracle Database performance monitoring</li>
+    <li>Session and SQL runtime analysis</li>
+    <li>Wait Event and bottleneck detection</li>
+    <li>AWR / ASH performance report analysis</li>
+    <li>Tablespace and storage monitoring</li>
+    <li>SQL Worksheet for query execution and tuning</li>
+    <li>RAC and instance activity monitoring</li>
+    <li>Oracle licensing and management pack configuration</li>
+  </ul>
+</b>
+
+<br>
+
+<h3>System Description</h3>
+
+<p>
+  OPMS-DBA is a web-based Oracle Database performance monitoring system
+  developed to support Database Administrators (DBA) and software developers
+  in monitoring, analyzing, and troubleshooting Oracle Database systems.
+</p>
+
+<p>
+  The system provides real-time monitoring dashboards, session analysis,
+  SQL performance diagnostics, wait-event tracking, and historical workload analysis
+  using Oracle AWR and ASH data.
+</p>
+
+<br>
+
+<h3><%= t :env_licensing_header, :default=>"Licensing" %></h3>
+
+<% @show_management_pack_choice = false %>
+
+<%= render :partial => 'licensing' %>
+
+<br/>
+
+<span style="color:red;">
+  Some monitoring functions require Oracle Diagnostic Pack
+  and Tuning Pack licensing.
+</span>
+
+<br><br>
+
+The database account used for login requires at least the privilege:
+
+<b>SELECT ANY DICTIONARY</b>
+
+<br><br>
+
+<h3>Technology Stack</h3>
+
+<ul>
+  <li>Ruby on Rails (JRuby)</li>
+  <li>Oracle Database 19c / 21c</li>
+  <li>JDBC Thin Driver</li>
+  <li>HTML / CSS / JavaScript</li>
+</ul>
+
+<br>
+
+<h3>Project Information</h3>
+
+<p>
+  Graduation Thesis Project – OPMS-DBA<br>
+  Oracle Performance Monitoring System
+</p>
+
+<br>
+
+<%= "#{Panorama::RELEASE_YEAR}/#{Panorama::RELEASE_MONTH}/#{Panorama::RELEASE_DAY}" %>
+Version <%= Panorama::VERSION %>
+
+<div id="check4update"></div>
+
+<script type="application/javascript">
+  check4update('check4update', '<%= Panorama::VERSION %>');
+</script>
+

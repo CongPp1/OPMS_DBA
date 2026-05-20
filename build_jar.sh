@@ -1,0 +1,80 @@
+if [ "$1" != "without_clean_cache" ]
+then
+  echo "Clean Cache and logs"
+  rm -rf tmp/*
+  rm -rf log/*
+  # uncomment if needed
+  # bundle clean --force
+fi
+
+echo "Remove the assets at public"
+rm -rf public/assets/*
+rm -rf public/assets/.sprockets*
+# Remove mini profile files
+find . -name mp_views* -exec rm -f {} \;
+
+# Use the Gemfile.lock as it is and don't update the gems
+bundle config set deployment 'true'
+
+if [ "$1" != "without_assets" ]
+then
+  #### Configure all for rake asssets:precompile
+  # Restore the original Gemfile.lock content for rake execution
+  bundle config unset without
+  # Force bundle install to work serially: Possible needed Gems are not available in parallel streams like
+  # ruby-maven,
+  # Possible alternative: manual installation before parallel bundle install
+  # bundle install --jobs 4
+  bundle install --jobs 4 || echo "############# parallel bundle install failed ! Trying serial" && bundle install
+  echo "Compile assets"
+  bundle exec rake assets:precompile
+  if [ $? -ne 0 ]
+  then
+    echo "######### Error running rake assets:precompile"
+    # reset previous state
+    bundle config unset deployment
+    bundle config unset without
+    exit 1
+  fi
+fi
+
+# Avoid installing the gems in the development and test group and omit them in the jar
+# Does the same like  export BUNDLE_WITHOUT="development:test"
+bundle config set --local without 'development test'
+bundle install --jobs 4
+
+# Remove unneeded dependencies to reduce the size of the jar file, this is done by excluded_gems
+# bundle clean --force
+# for gem in `grep -v '^#' excluded_gems.txt | grep -v '^$'`
+# do
+#   echo "Remove $gem from installed gems"
+#   bundle exec gem uninstall $gem --force --executables
+# done
+
+# Ensures that after no test or development dependecies are initialized at 'bundle exec rake assets:precompile'
+export RAILS_ENV=production
+
+# gem install --local /Users/pramm/Documents/Projekte/rammpeter.github/jarbler/jarbler-0.4.6.gem
+gem install jarbler
+
+
+# NoMethodError: protected method `pathmap_replace' called for "public/404.html":String
+# Fixen durch auskommentieren des protection-Flags für pathmap_replace in gems/rake-11.3.0/lib/rake/ext/string.rb
+
+echo "Create Panorama.jar"
+jarble
+JARBLE_RC=$?
+
+# reset previous state
+bundle config unset deployment
+bundle config unset without
+
+if [ $JARBLE_RC -ne 0 ]
+then
+  echo "######### Error creating jar file"
+  exit 1
+fi
+
+echo "Entfernen der assets unter public"
+rm -r public/assets/*
+rm -r public/assets/.sprockets*
