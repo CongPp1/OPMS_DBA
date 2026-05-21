@@ -1,4 +1,4 @@
-# Change log of Panorama for Oracle
+# Change log of OPMS for Oracle
 ## [Unreleased]
 
 - 2026-03-30 Show content of DBA_Tab_Statistics for tables and partitions after link on last analayzed date
@@ -18,26 +18,26 @@
 - 2025-11-24 Bugfix for issue #26: Error while opening UNDO usage historic nil can't be coerced into Integer
 
 ## Release 2.19.4
-- 2025-11-21 Bugfix for overflow in PANORAMA_PARAMETER.Value ( size increased from 512 to 4000 )
+- 2025-11-21 Bugfix for overflow in OPMS_PARAMETER.Value ( size increased from 512 to 4000 )
 
 ## Release 2.19.3
 - 2025.11-18 Bugfix for setting SECRET_KEY_BASE in config file
 
 ## Release 2.19.2
-- 2025-11-12 Configuration can be stored in config file declared by env entry PANORAMA_CONFIG_FILE
-- 2025-11-11 Even if SSL encryption (https) is not used, the user and password credentials are always asynchronously encrypted at network transfer from browser to the Panorama server by a public key where the private key for decryption is only known inside the Panorama server code.
+- 2025-11-12 Configuration can be stored in config file declared by env entry OPMS_CONFIG_FILE
+- 2025-11-11 Even if SSL encryption (https) is not used, the user and password credentials are always asynchronously encrypted at network transfer from browser to the OPMS server by a public key where the private key for decryption is only known inside the OPMS server code.
 
 ## Release 2.19.1
-- 2025-11-05 Respect time zone delay between DB and Panorama-Server for blocking thread
+- 2025-11-05 Respect time zone delay between DB and OPMS-Server for blocking thread
 - 2025-09-10 History of init.ora parameters added to "DBA General / Database configuration / Init parameters"
 
 ## Release 2.18.4
 - 2025-08-07 Offer Oracle's SQL diagnostic report for 19.28++
 - 2025-08-07 Show spinner while loading the original Oracle reports in new browser tag
-- 2025-07-29 Require Java 21 or higher as runtime environment for Panorama, due to update of JRuby to 10.x
+- 2025-07-29 Require Java 21 or higher as runtime environment for OPMS, due to update of JRuby to 10.x
 
 ## Release 2.17.76
-- 2025-07-02 All DATE and TIMESTAMP values are converted now to the client timezone of the Panorama server if this is different from the database system timezone
+- 2025-07-02 All DATE and TIMESTAMP values are converted now to the client timezone of the OPMS server if this is different from the database system timezone
 - 2025-05-06 Generate code for drop of SQL plan baseline
 
 ## Release 2.17.73
@@ -61,18 +61,18 @@
 - 2023-09-19 Evaluation of unified audit trail added
 - 2023-08-17 Show client driver and client driver version in session list
 - 2023-06-05 New dragnet selection to detect empty unused partitions
-- 2023-05-22 Export and import of Panorama-Sampler config data possible now
+- 2023-05-22 Export and import of OPMS-Sampler config data possible now
 - 2023-03-14 New menu entry "Optimizer hints" with relation between hints and features
-- 2022-11-07 Bugfix: Panorama-Sampler rebuilds unuable indexes after shrinking space in reaction to errors
+- 2022-11-07 Bugfix: OPMS-Sampler rebuilds unuable indexes after shrinking space in reaction to errors
 - 2022-11-07 List unusable indexes also with invalid objects listing
 - 2022-10-18 New dragnet selection with suggestions for use of HASH JOIN SHARED
-- 2022-10-04 Panorama-Sampler: Finally fixed the ASH problem with ORA-00001: unique constraint (C##PANORAMA_TEST.INTERNAL_V$ACTIVE_SESS_HIST_PK) violated
-- 2022-09-28 Panorama-Sampler: Timing for ASH reworked to prevent from ORA-00001: unique constraint (C##PANORAMA_TEST.INTERNAL_V$ACTIVE_SESS_HIST_PK) violated
-- 2022-09-28 Panorama-Sampler: Proceed with AWR snapshot even if there are errors at particular elements
-- 2022-09-19 Panorama-Sampler: ASH and AWR are recorded for all visible PDBs now according to v$Containers
+- 2022-10-04 OPMS-Sampler: Finally fixed the ASH problem with ORA-00001: unique constraint (C##OPMS_TEST.INTERNAL_V$ACTIVE_SESS_HIST_PK) violated
+- 2022-09-28 OPMS-Sampler: Timing for ASH reworked to prevent from ORA-00001: unique constraint (C##OPMS_TEST.INTERNAL_V$ACTIVE_SESS_HIST_PK) violated
+- 2022-09-28 OPMS-Sampler: Proceed with AWR snapshot even if there are errors at particular elements
+- 2022-09-19 OPMS-Sampler: ASH and AWR are recorded for all visible PDBs now according to v$Containers
 - 2022-09-07 Bugfix: Instance=1 assumed if not RAC. Fix error: Instance number should not be empty
-- 2022-09-07 Panorama-Sampler: Keep time for ASH records with 1 second sampe cycle can be configured now, makes dashbord function better usable with Panorama-Sampler
-- 2022-09-07 Bugfix: Panorama-Sampler stores historic execution plans correctly now in Panorama_SQL_Plan
+- 2022-09-07 OPMS-Sampler: Keep time for ASH records with 1 second sampe cycle can be configured now, makes dashbord function better usable with OPMS-Sampler
+- 2022-09-07 Bugfix: OPMS-Sampler stores historic execution plans correctly now in OPMS_SQL_Plan
 - 2022-08-29 Bugfix: Limit log-term trend recording to ASH of the current PDB (possible double count until now on PDB and CDB)
 - 2022-08-25 Accept protecting index for FK constraints if all columns match, no matter which order the columns have
 - 2022-06-30 Show DBMS_XPLAN.DISPLAY_AWR for historic SQLs
@@ -91,15 +91,15 @@
 - 2021-06-16 Dragnet selection added for list partitioning proposals
 - 2021-06-13 Period selection in time graphs added for ASH investigation
 - 2021-06-13 Real-time dashboard for ASH, SQLs and sessions added
-- 2021-03-19 Default secret for repeated use is generated at PANORAMA_VAR_HOME if no other is given
+- 2021-03-19 Default secret for repeated use is generated at OPMS_VAR_HOME if no other is given
 - 2021-02-17 Dragnet selection for use of JDBC statement cache
 - 2021-02-11 Differentiation between hard and soft parse calls in SQL details
 - 2020-10-28 predefined_dragnet_selections.json required in strict JSON notation (line feeds in strings as \n)
-- 2020-09-30 SECRET_KEY_BASE or SECRET_KEY_BASE_FILE are required now for persistent connection configs.<br/>CAUTION: Passwords for Panorama-Samplerconnections have to be entered again
-- 2020-05-19 Bufix Panorama-Sampler: db block changes are sampled now
+- 2020-09-30 SECRET_KEY_BASE or SECRET_KEY_BASE_FILE are required now for persistent connection configs.<br/>CAUTION: Passwords for OPMS-Samplerconnections have to be entered again
+- 2020-05-19 Bufix OPMS-Sampler: db block changes are sampled now
 - 2020-05-11 Historic usage of TEMP-tablespace now possible per Tablespace
 - 2020-03-02 gv$Process_Memory_Detail evaluated in session details including usage hints for population of this view
-- 2020-02-17 Saved connections expire after 3 months without using Panorama
+- 2020-02-17 Saved connections expire after 3 months without using OPMS
 - 2020-01-20 List detailled consumption of PGA memory by sessions in 'PGA statistics / Current'
 - 2019-12-11 List detailled transaction history by flashback query
 - 2019-03-19 List RAC master instance for tables, indexes and their partitions and subpartitions 
@@ -114,7 +114,7 @@
 - 2018-06-20 SQL worksheet established
 - 2018-06-08 List existing extended statistics for table by clicking last analyzed date
 - 2018-06-07 Redo-logs in FRA don't count in addition to FRA-size for total sum
-- 2018-06-04 Use permanent subdir Panorama at your systems default temporary directory if not setting PANORAMA_VAR_HOME
+- 2018-06-04 Use permanent subdir OPMS at your systems default temporary directory if not setting OPMS_VAR_HOME
 - 2018-05-06 Show object description for objects in recycle bin
 - 2018-05-05 Show log message if path length may exceed Windows-limit of 260 chars
 - 2018-05-02 Fixed problem on Windows-OS with No such file to load -- win32/security.rb
@@ -128,16 +128,16 @@
 - 2017-11-09 Include-Files supported for tnsnames.ora a'la IFILE=/bla/bla
 - 2017-11-09 New Pnorama-Sampler functions added for object size evolution, DB-cache usage and blocking locks history
 - 2017-09-15 v$SYSAUX_Occupants added to TS-list
-- 2017-09-01 Panorama-Sampler: sampling of SegStat added
+- 2017-09-01 OPMS-Sampler: sampling of SegStat added
 - 2017-08-31 Choose plan_hash value for baseline creation if there are multiple
-- 2017-08-29 Panorama-Sampler: sampling of SysStat added
-- 2017-08-28 Panorama-Sampler: sampling of SQL binds added
-- 2017-08-27 Panorama-Sampler: sampling of SQL plan added
+- 2017-08-29 OPMS-Sampler: sampling of SysStat added
+- 2017-08-28 OPMS-Sampler: sampling of SQL binds added
+- 2017-08-27 OPMS-Sampler: sampling of SQL plan added
 - 2017-08-23 Own sampling for SQL History, ASH
 - 2017-08-10 Show active resource manager plan in start page
 - 2017-08-10 Detailled view on automated maintenance tasks
-- 2017-08-09 First alpha release of Panorama-Sampler as alternative to AWR
-- 2017-08-09 Separate thread per Web-Request to Panorama instead of fixed number of processes (supports more concurrent requests in multiuser environment)
+- 2017-08-09 First alpha release of OPMS-Sampler as alternative to AWR
+- 2017-08-09 Separate thread per Web-Request to OPMS instead of fixed number of processes (supports more concurrent requests in multiuser environment)
 - 2017-06-19 Show column other with remote SQL via DB-Link in explain plan
 - 2017-06-15 Show ORACLE_HOME in start page
 - 2017-06-14 List fragmentation fo free tablespace extents, list extent size distribution of segments (table, index)
@@ -173,8 +173,8 @@
 - 2016-04-07 Show IP name resolution for machines
 - 2016-04-06 Evaluate LOB partitions in function "Describe object"
 - 2016-03-30 Menu entry "Attached objects" removed. New function "Sessions accessing" and "Objects accessed" in session details and table description for evaluation of gv$Access
-- 2016-03-21 Additional predefined SQLs for dragnet selection may be distribibuted by file predefined_dragnet_selections.json in PANORAMA_VAR_HOME
-- 2016-03-20 User is enabled to define personal dragnet SQLs that are stored at Panorama's server instance
+- 2016-03-21 Additional predefined SQLs for dragnet selection may be distribibuted by file predefined_dragnet_selections.json in OPMS_VAR_HOME
+- 2016-03-20 User is enabled to define personal dragnet SQLs that are stored at OPMS's server instance
 - 2016-03-16 Show historic GATHER_TABLE_STATS-operations as link at column "last analyzed" in table descriptions
 - 2016-03-14 New dragnet selection to identify TABLE ACCESS BY ROWID with string filter after weak index access
 - 2016-03-03 New function to generate script for creation of SQL plan baseline from historic execution plan by simple button click
@@ -226,7 +226,7 @@
 - 2015-07-16 Evaluate history for one SQL-ID over all RAC-instances (not only per instance)
 - 2015-07-16 Show LOB details in object description, include LOB-size in size calculation of object size
 - 2015-07-16 Describe database objectes as separate menu item
-- 2015-07-16 SSL-encrypted network traffic between browser and Panorama-instance (https)
+- 2015-07-16 SSL-encrypted network traffic between browser and OPMS-instance (https)
 - 2015-07-16 SQL-details historic: List complete history of recorded bind values
 - 2015-01-22 Historic timeline resource usage and resource limits
 - 2015-01-22 Historic timeline for real CPU-usage and DB-time
@@ -237,7 +237,7 @@
 - 2014-01-15 Konsoldierung von Storage-Themen unter eigenem Menüpunkt
 - 2014-01-15 Tabellen in Höhe zoombar durch Anfassen am unteren Rand
 - 2014-01-15 Auswertung Active Session History jetzt auch nach Transaction-ID und SQL-Exec-ID
-- 2013-05-14 Embedded Web-Server jetzt im Panorama.war enthalten, damit kann Panorama Standalone ausgeführt werden per "java -jar Panorama.war -Xmx512m". Bei Zeichensatz-Problemen bitte nach -Dfile.encoding=UTF-8 hinzufuegen.
+- 2013-05-14 Embedded Web-Server jetzt im OPMS.war enthalten, damit kann OPMS Standalone ausgeführt werden per "java -jar OPMS.war -Xmx512m". Bei Zeichensatz-Problemen bitte nach -Dfile.encoding=UTF-8 hinzufuegen.
 - 2012-11-26 Umstellung der tabellarischen Darstellungen auf jQuery-Plugin "slickGrid"
 - 2012-09-18 Erweiterung der Active Session History für Oracle 11g
 - 2011-11-30 Anzeige Wait-Times je Objekt in Segment-Statistics historisch

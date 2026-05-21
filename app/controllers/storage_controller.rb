@@ -615,7 +615,7 @@ class StorageController < ApplicationController
     end
 
     @datafiles = sql_select_iterator ["\
-      SELECT /*+ PARALLEL(2) Panorama-Tool Ramm */
+      SELECT /*+ PARALLEL(2) OPMS-Tool Ramm */
              d.*,
              NVL(f.BYTES,0)/1048576            MBFree,
              (d.BYTES-NVL(f.BYTES,0))/1048576  MBUsed,

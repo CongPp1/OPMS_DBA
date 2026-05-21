@@ -731,14 +731,14 @@ module ApplicationHelper
   def get_sql_shorttext_by_sql_id(sql_id)
     # erster Versuch direkt aus SGA zu lesen
     sql_text = sql_select_first_row ["\
-                 SELECT /*+ Panorama-Tool Ramm */ SUBSTR(SQL_FullText, 1, 150) SQL_Text
+                 SELECT /*+ OPMS-Tool Ramm */ SUBSTR(SQL_FullText, 1, 150) SQL_Text
                  FROM   gv$SQLArea
                  WHERE  SQL_ID = ?",
                            sql_id]
 
     if sql_text.nil? && !PackLicense.none_licensed? # Wenn nicht gefunden, dann in AWR-History suchen, but only if access is allowed
       sql_text = sql_select_first_row ["\
-                   SELECT /*+ Panorama-Tool Ramm */ SUBSTR(SQL_Text, 1, 150) SQL_Text
+                   SELECT /*+ OPMS-Tool Ramm */ SUBSTR(SQL_Text, 1, 150) SQL_Text
                    FROM   DBA_Hist_SQLText
                    WHERE  DBID   = ?
                    AND    SQL_ID = ?",
@@ -784,7 +784,7 @@ module ApplicationHelper
 
   # Ermitteln der Min- und Max-Abgrenzungen auf Basis Snap_ID für Zeitraum über alle Instanzen hinweg
   def get_min_max_snap_ids(time_selection_start, time_selection_end, dbid, raise_if_not_found: false)
-    min_snap_id = sql_select_one ["SELECT /*+ Panorama-Tool Ramm */ MIN(Snap_ID)
+    min_snap_id = sql_select_one ["SELECT /*+ OPMS-Tool Ramm */ MIN(Snap_ID)
                                     FROM   (SELECT MAX(Snap_ID) Snap_ID
                                             FROM   DBA_Hist_Snapshot
                                             WHERE DBID = ?
@@ -794,14 +794,14 @@ module ApplicationHelper
                                    ", dbid, time_selection_start
                                   ]
     unless min_snap_id   # Start vor Beginn der Aufzeichnungen, dann kleinste existierende Snap-ID
-      min_snap_id = sql_select_one ['SELECT /*+ Panorama-Tool Ramm */ MIN(Snap_ID)
+      min_snap_id = sql_select_one ['SELECT /*+ OPMS-Tool Ramm */ MIN(Snap_ID)
                                       FROM   DBA_Hist_Snapshot
                                       WHERE DBID = ?
                                      ', dbid
                                     ]
     end
 
-    max_snap_id = sql_select_one ["SELECT /*+ Panorama-Tool Ramm */ MAX(Snap_ID)
+    max_snap_id = sql_select_one ["SELECT /*+ OPMS-Tool Ramm */ MAX(Snap_ID)
                                     FROM   (SELECT MIN(Snap_ID) Snap_ID
                                             FROM   DBA_Hist_Snapshot
                                             WHERE DBID = ?
@@ -811,7 +811,7 @@ module ApplicationHelper
                                    ", dbid, time_selection_end
                                   ]
     unless max_snap_id       # Letzten bekannten Snapshot werten, wenn End-Zeitpunkt in der Zukunft liegt
-      max_snap_id = sql_select_one ['SELECT /*+ Panorama-Tool Ramm */ MAX(Snap_ID)
+      max_snap_id = sql_select_one ['SELECT /*+ OPMS-Tool Ramm */ MAX(Snap_ID)
                                       FROM   DBA_Hist_Snapshot
                                       WHERE DBID = ?
                                      ', dbid

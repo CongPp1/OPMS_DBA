@@ -288,7 +288,7 @@ because this literals become replaced by bind variables.
 Solution: Transfer literals into PL/SQL-functions and call this function in function based index instead.
 This view selects potential hits for function based indexes no more used for SQL execution.
 '),
-            :sql=>   "SELECT /* Panorama-Tool Ramm  */
+            :sql=>   "SELECT /* OPMS-Tool Ramm  */
                          i.Owner, i.Index_Name, i.Index_type, i.Table_Name, i.Num_Rows,
                          e.Column_Position, e.Column_Expression
                   FROM   DBA_Indexes i
@@ -304,7 +304,7 @@ This view selects potential hits for function based indexes no more used for SQL
             :desc  => t(:dragnet_helper_57_desc, :default=>'Large amount of child cursors per SQL-ID (> 500) show risk of latch waits and heavy CPU-usage for parse and execute.
 Following counter columns show reasons why parsing SQL results in new child cursor.
 Documentation is available here: http://docs.oracle.com/cd/E16655_01/server.121/e17615/refrn30254.htm#REFRN30254'),
-            :sql=>   "SELECT /* Panorama-Tool Ramm  */
+            :sql=>   "SELECT /* OPMS-Tool Ramm  */
                          Inst_ID, SQL_ID, COUNT(*) Child_Count
                         #{result = String.new
             recs = sql_select_all("SELECT Column_Name FROM DBA_Tab_Columns WHERE Table_Name = 'V_$SQL_SHARED_CURSOR' AND Data_Type = 'VARCHAR2' AND Data_Length = 1 ORDER BY Column_ID")

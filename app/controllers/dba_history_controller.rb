@@ -426,7 +426,7 @@ class DbaHistoryController < ApplicationController
                                 GROUP BY Instance_Number, DBID
                                ) s
                        )
-         SELECT /*+ NO_MERGE ORDERED Panorama-Tool Ramm */
+         SELECT /*+ NO_MERGE ORDERED OPMS-Tool Ramm */
                  NVL(MIN(Parsing_Schema_Name), '[UNKNOWN]')  Parsing_Schema_Name,
                  MAX(s.Plan_Hash_Value) KEEP (DENSE_RANK LAST ORDER BY s.Snap_ID) Last_Plan_Hash_Value,
                  COUNT(DISTINCT p.Plan_Hash_Value)  Plan_Hash_Value_Count,
@@ -653,7 +653,7 @@ class DbaHistoryController < ApplicationController
     end
 
     # Ermittlung der DISTINCT Pläne
-    @multiplans = sql_select_all ["SELECT /*+ ORDERED INDEX(s) Panorama-Tool Ramm */
+    @multiplans = sql_select_all ["SELECT /*+ ORDERED INDEX(s) OPMS-Tool Ramm */
                                            s.Plan_Hash_Value, s.DBID, s.Parsing_Schema_Name,
                                            MIN(Optimizer_Env_Hash_Value) Optimizer_Env_Hash_Value,
                                            SUM(s.Elapsed_Time_Delta)/1000000 Elapsed_Time_Secs,
@@ -697,7 +697,7 @@ class DbaHistoryController < ApplicationController
 
 
     all_plans = sql_select_all ["\
-                         SELECT /*+ ORDERED USE_NL(p) Panorama-Tool Ramm */
+                         SELECT /*+ ORDERED USE_NL(p) OPMS-Tool Ramm */
                                 ps.DBID, ps.Plan_Hash_Value, ps.Parsing_Schema_Name, p.Timestamp,
                                 p.Operation, p.Options, p.Object_Owner, p.Object_Name, p.Object_Type, p.Object_Alias, p.QBlock_Name, p.Optimizer,
                                 p.Other_Tag, p.Other_XML, p.Other, p.Search_Columns,
@@ -1965,7 +1965,7 @@ FROM (
 
 
     @diffs = sql_select_all ["\
-             SELECT /*+ Panorama-Tool Ramm */
+             SELECT /*+ OPMS-Tool Ramm */
                     GREATEST(t1.Instance_Count,t2.Instance_Count) Instance_Count,
                     LEAST(t1.Min_Instance_Number, t2.Min_Instance_Number) Min_Instance_Number,
                     t1.Min_Instance_Number Min_Instance_Number_t1,

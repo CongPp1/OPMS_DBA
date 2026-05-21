@@ -277,7 +277,7 @@ class DbaWaitsController < ApplicationController
     end
 
     @waits = sql_select_iterator ["\
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              -- Beginn eines zu betrachtenden Zeitabschnittes
              TRUNC(s.Sample_Time, '#{params[:grouping]}')   Start_Sample,
              COUNT(1)                                       Count_Samples,

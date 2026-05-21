@@ -52,7 +52,7 @@ Often problematic usage of business keys can be detetcted by existence of refere
                                   FROM   DBA_Constraints
                                   WHERE  Owner NOT IN (#{system_schema_subselect})
                                  )
-             SELECT /* Panorama-Tool Ramm: Fachliche Schluessel*/ p.Owner||'.'||p.Table_Name \"Referenced Table\",
+             SELECT /* OPMS-Tool Ramm: Fachliche Schluessel*/ p.Owner||'.'||p.Table_Name \"Referenced Table\",
                     MIN(pr.Num_Rows) \"Rows in referenced table\",
                     p.Constraint_Name \"Primary Key\", r.Owner||'.'||r.Table_Name \"Referencing Table\",
                     MIN(tr.Num_Rows) \"Rows in referencing table\",
@@ -77,7 +77,7 @@ Often problematic usage of business keys can be detetcted by existence of refere
             :desc  => t(:dragnet_helper_52_desc, :default=> 'You should have some minimal audit of logon and DDL operations for traceability of problematic DDL.
 Please remind also to establish housekeeping on audit data e.g. table sys.AUD$.'),
             :sql=>  "
-              SELECT /* Panorama-Tool Ramm: Auditing */
+              SELECT /* OPMS-Tool Ramm: Auditing */
                      'AUDIT '||NVL(a.Message, a.Name)||';'  \"Suggested audit rule\"
               FROM
               (

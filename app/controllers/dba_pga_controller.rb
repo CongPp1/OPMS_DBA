@@ -5,7 +5,7 @@ class DbaPgaController < ApplicationController
 
   def show_pga_stat_current
     @stats = sql_select_all "
-      SELECT /*+ Panorama-Tool Ramm */ s.Inst_ID, COUNT(*) Sessions,
+      SELECT /*+ OPMS-Tool Ramm */ s.Inst_ID, COUNT(*) Sessions,
              SUM(pga_used_mem)/(1024*1024)      Sum_Used_Mem_MB,
              AVG(pga_used_mem)/(1024*1024)      Avg_Used_Mem_MB,
              SUM(pga_alloc_mem)/(1024*1024)     Sum_alloc_Mem_MB,
@@ -93,7 +93,7 @@ Please use a larger period with valid AWR data.
 Min, Snap_ID = #{snaps.min_snap_id}, max,, Snap_ID = #{snaps.max_snap_id}") if snaps.min_snap_id.nil? || snaps.max_snap_id.nil?
 
     stats = sql_select_iterator [
-      " SELECT /*+ Panorama-Tool Ramm */ ss.Begin_Interval_Time, x.Name, x.Value
+      " SELECT /*+ OPMS-Tool Ramm */ ss.Begin_Interval_Time, x.Name, x.Value
         FROM   (
                           SELECT Snap_ID, DBID, Instance_Number, Name,                    Value                 FROM   DBA_Hist_PGAStat
                 UNION ALL SELECT Snap_ID, DBID, Instance_Number, 'Used_' ||Category Name, Used_Total      Value FROM   DBA_Hist_Process_Mem_Summary

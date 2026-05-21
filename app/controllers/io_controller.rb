@@ -148,7 +148,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              #{io_file_key_rule(@groupby)[:sql]}           Group_Value,
              MIN(f.Begin_Interval_Time)                    First_Occurrence,
              MAX(f.End_Interval_Time)                      Last_Occurrence,
@@ -179,7 +179,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              f.Rounded_Begin_Interval_Time Begin_Interval_Time,
              #{io_file_history_external_column_list}
       FROM   (#{io_file_history_internal_sql_select}) f
@@ -216,7 +216,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              #{io_file_key_rule(@groupby)[:sql]}           Group_Value,
              f.Rounded_End_Interval_Time                   End_Interval_Time,
              #{io_file_history_external_column_list}
@@ -330,7 +330,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              #{iostat_detail_key_rule(@groupby)[:sql]}           Group_Value,
              MIN(f.Begin_Interval_Time)                    First_Occurrence,
              MAX(f.End_Interval_Time)                      Last_Occurrence,
@@ -358,7 +358,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              f.Rounded_Begin_Interval_Time Begin_Interval_Time,
              #{timestamp_diff_secs('MIN(f.End_Interval_Time) - MIN(f.Begin_Interval_Time)')} Sample_Dauer_Secs,
              #{iostat_detail_history_external_column_list}
@@ -396,7 +396,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              #{iostat_detail_key_rule(@groupby)[:sql]}           Group_Value,
              Rounded_End_Interval_Time,
              #{timestamp_diff_secs('MIN(f.End_Interval_Time) - MIN(f.Begin_Interval_Time)')} Sample_Dauer_Secs,
@@ -521,7 +521,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              #{iostat_filetype_key_rule(@groupby)[:sql]}           Group_Value,
              MIN(f.Begin_Interval_Time)                    First_Occurrence,
              MAX(f.End_Interval_Time)                      Last_Occurrence,
@@ -549,7 +549,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              f.Rounded_Begin_Interval_Time Begin_Interval_Time,
              #{timestamp_diff_secs('MIN(f.End_Interval_Time) - MIN(f.Begin_Interval_Time)')} Sample_Dauer_Secs,
              #{iostat_filetype_history_external_column_list}
@@ -587,7 +587,7 @@ class IoController < ApplicationController
                      FROM   DBA_Hist_Snapshot s
                      WHERE  1=1 #{@with_where_string}
                     )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              #{iostat_filetype_key_rule(@groupby)[:sql]}           Group_Value,
              Rounded_End_Interval_Time,
              #{timestamp_diff_secs('MIN(f.End_Interval_Time) - MIN(f.Begin_Interval_Time)')} Sample_Dauer_Secs,

@@ -468,7 +468,7 @@ function show_popup_message(message){
     msg_div
         .html(message)
         .dialog({
-            title:'Panorama',
+            title:'OPMS',
             draggable:  true,
             open:       function(/*event, ui*/){ $(this).parent().focus(); },
             width:      jQuery(window).width()*0.5,
@@ -658,7 +658,6 @@ function ensureGraphVizLoaded(callback){
         callback();
     }
 }
-
 
 
 

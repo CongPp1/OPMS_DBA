@@ -58,7 +58,7 @@ class ActiveSessionHistoryController < ApplicationController
                         gv$Session shows the Object_ID used in DBA_Objects */
                      JOIN   DBA_Objects o ON o.Owner = p.Owner AND o.Object_Name = p.Object_Name AND o.Object_Type = p.Object_Type
                     )
-      SELECT /*+ ORDERED USE_HASH(u sv f) Panorama-Tool Ramm */
+      SELECT /*+ ORDERED USE_HASH(u sv f) OPMS-Tool Ramm */
              -- Beginn eines zu betrachtenden Zeitabschnittes
              TRUNC(Sample_Time) + TRUNC(TO_NUMBER(TO_CHAR(Sample_Time, 'SSSSS'))/#{group_seconds})*#{group_seconds}/86400 Start_Sample,
              NVL(TO_CHAR(#{session_statistics_key_rule(@groupby)[:sql]}), 'NULL') Criteria,
@@ -195,7 +195,7 @@ class ActiveSessionHistoryController < ApplicationController
                    select_rounded_sample_time:  true,
                    with_cte_alias:              'ash'
                   )}
-      SELECT /*+ ORDERED USE_HASH(u sv f) Panorama-Tool Ramm */
+      SELECT /*+ ORDERED USE_HASH(u sv f) OPMS-Tool Ramm */
              MIN(s.Sample_Time)         Start_Sample_Time,
              MAX(s.Sample_Time)         End_Sample_Time,
              MIN(s.Rounded_Sample_Time) Start_Rounded_Sample_Time,
@@ -385,7 +385,7 @@ class ActiveSessionHistoryController < ApplicationController
                         gv$Session shows the Object_ID used in DBA_Objects */
                      JOIN   DBA_Objects o ON o.Owner = p.Owner AND o.Object_Name = p.Object_Name AND o.Object_Type = p.Object_Type
                     )
-      SELECT /*+ ORDERED USE_HASH(u sv f) Panorama-Tool Ramm */
+      SELECT /*+ ORDERED USE_HASH(u sv f) OPMS-Tool Ramm */
              #{session_statistics_key_rule(@groupby)[:sql]}           Group_Value,
              #{if session_statistics_key_rule(@groupby)[:info_sql]
                  session_statistics_key_rule(@groupby)[:info_sql]
@@ -1206,7 +1206,7 @@ class ActiveSessionHistoryController < ApplicationController
         WHERE  1=1
         #{@global_where_string}
       )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              MIN(s.Sample_Time)   Start_Sample_Time,
              MAX(s.Sample_Time)   End_Sample_Time,
              SUM(Sample_Count)    Sample_Count,
@@ -1318,7 +1318,7 @@ class ActiveSessionHistoryController < ApplicationController
         WHERE  1=1
         #{@global_where_string}
       )
-      SELECT /*+ ORDERED Panorama-Tool Ramm */
+      SELECT /*+ ORDERED OPMS-Tool Ramm */
              MIN(s.Sample_Time)   Start_Sample_Time,
              MAX(s.Sample_Time)   End_Sample_Time,
              SUM(Sample_Count)    Sample_Count,
