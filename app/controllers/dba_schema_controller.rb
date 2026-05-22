@@ -2789,7 +2789,7 @@ class DbaSchemaController < ApplicationController
     where_values = []
 
     if params[:time_selection_start] && params[:time_selection_end]
-      save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+      save_session_time_selection    # Buffer values ​​for later reuse
       where_string << " AND Extended_Timestamp >= TO_DATE(?, '#{sql_datetime_mask(@time_selection_start)}') AND Extended_Timestamp <  TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}')"
       where_values << @time_selection_start
       where_values << @time_selection_end
@@ -2995,7 +2995,7 @@ class DbaSchemaController < ApplicationController
     where_values = []
 
     if params[:time_selection_start] && params[:time_selection_end]
-      save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+      save_session_time_selection    # Buffer values ​​for later reuse
       where_string << " AND Event_Timestamp >= TO_DATE(?, '#{sql_datetime_mask(@time_selection_start)}') AND Event_Timestamp <  TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}')"
       where_values << @time_selection_start
       where_values << @time_selection_end

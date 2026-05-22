@@ -13,7 +13,7 @@ class DbaHistoryController < ApplicationController
     @show_partitions = params[:show_partitions]
     @object_name     = params[:ObjectName]
     @object_name     = nil if @object_name == ""
-    save_session_time_selection  # werte in session puffern
+    save_session_time_selection  # buffer values ​​in session
 
     @segment_sums = sql_select_iterator ["
       WITH Objects AS (SELECT /*+ NO_MERGE MATERIALIZE */ Object_ID, Owner, Object_Name, SubObject_Name, Object_Type
@@ -302,12 +302,12 @@ class DbaHistoryController < ApplicationController
     maxResultCount   = nil if  maxResultCount == ''
     groupby_instance = params[:groupby_instance] && params[:groupby_instance] != ''
 
-    save_session_time_selection                                                 # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection                                                 # Buffer values ​​for later reuse
 
-    where_string_instance  = String.new                                         # Filter-Text für nachfolgendes Statement
-    where_string_innen     = String.new                                         # Filter-Text für nachfolgendes Statement
-    where_string_aussen    = String.new                                         # Filter-Text für nachfolgendes Statement
-    where_values = [@time_selection_start, @time_selection_start, @time_selection_end, @time_selection_end, @dbid]          # Filter-werte für nachfolgendes Statement
+    where_string_instance  = String.new                                         # Filter text for the following statement
+    where_string_innen     = String.new                                         # Filter text for the following statement
+    where_string_aussen    = String.new                                         # Filter text for the following statement
+    where_values = [@time_selection_start, @time_selection_start, @time_selection_end, @time_selection_end, @dbid]          # Filter values ​​for the following statement
     if instance
       where_string_instance << " AND Instance_Number = ?"
       where_values << instance.to_i
@@ -401,7 +401,7 @@ class DbaHistoryController < ApplicationController
     @parsing_schema_name = params[:parsing_schema_name]
     @parsing_schema_name = nil if @parsing_schema_name == ''
 
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @dbid        = prepare_param_dbid
 
     @sql= sql_select_first_row ["\
@@ -634,7 +634,7 @@ class DbaHistoryController < ApplicationController
     @min_snap_id = prepare_param_int  :min_snap_id
     @max_snap_id = prepare_param_int  :max_snap_id
     @parsing_schema_name = params[:parsing_schema_name]   # optional, Kann '[UNKNOWN]' enthalten, dann kein Match möglich
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @show_adaptive_plans = prepare_param_int :show_adaptive_plans
 
     where_stmt       = String.new
@@ -760,12 +760,12 @@ class DbaHistoryController < ApplicationController
                                        SUM(Interconnect_IO_Bytes) Interconnect_IO_Bytes,
                                        MAX(Temp)/(1024*1024)      Max_Temp_ASH_MB,
                                        MAX(PGA)/(1024*1024)       Max_PGA_ASH_MB,
-                                       MAX(PQ_Sessions)           Max_PQ_Sessions     -- max. Anzahl PQ-Slaves + Koordinator für eine konkrete Koordinator-Session
+                                       MAX(PQ_Sessions)           Max_PQ_Sessions     -- Maximum number of PQ slaves + coordinator for a specific coordinator session
                                 FROM   (
                                         SELECT /*+ PARALLEL(h,2) #{"FULL(h.ash)" if mp.max_snap_id-mp.min_snap_id > 10}*/
                                                 MIN(h.Sample_Time)                Min_Sample_Time,
                                                 MAX(h.Sample_Time)                Max_Sample_Time,
-                                                NVL(h.SQL_PLan_Line_ID, 0)        SQL_PLan_Line_ID,   -- NULL auf den Knoten 0 des Plans zurückführen (0 wird in 11.2.0.3 nicht mit nach DBA_HAS übernommen
+                                                NVL(h.SQL_PLan_Line_ID, 0)        SQL_PLan_Line_ID,   -- Return NULL to node 0 of the plan (0 is not transferred to DBA_HAS in 11.2.0.3)
                                                 COUNT(*) * 10                     Ash_Time_Seconds,
                                                 SUM(CASE WHEN h.Session_State = 'ON CPU'  THEN 10 ELSE 0 END) CPU_Seconds,
                                                 SUM(CASE WHEN h.Session_State = 'WAITING' THEN 10 ELSE 0 END) Waiting_Seconds,
@@ -777,7 +777,7 @@ class DbaHistoryController < ApplicationController
                                                 SUM(h.Delta_Interconnect_IO_Bytes)  Interconnect_IO_Bytes,
                                                 SUM(h.Temp_Space_Allocated)         Temp,
                                                 SUM(h.PGA_Allocated)                PGA,
-                                                COUNT(DISTINCT CASE WHEN h.QC_Session_ID IS NULL OR h.QC_Session_ID = h.Session_ID THEN NULL ELSE Session_ID END) PQ_Sessions   -- Anzahl unterschiedliche PQ-Slaves + Koordinator für diese Koordiantor-Session
+                                                COUNT(DISTINCT CASE WHEN h.QC_Session_ID IS NULL OR h.QC_Session_ID = h.Session_ID THEN NULL ELSE Session_ID END) PQ_Sessions   -- Number of different PQ slaves + coordinator for this coordinator session
                                          FROM   DBA_Hist_Active_Sess_History h
                                          WHERE  h.DBID = ?
                                          AND    h.Snap_ID >= ?
@@ -788,21 +788,21 @@ class DbaHistoryController < ApplicationController
                                          AND    h.Sample_Time+#{client_tz_offset_days} >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}')
                                          AND    h.Sample_Time+#{client_tz_offset_days} <= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}')
                                          #{ash_where_stmt}
-                                         GROUP BY h.SQL_Plan_Line_ID, NVL(h.QC_Session_ID, h.Session_ID), Sample_ID   -- Alle PQ-Werte mit auf Session kumulieren
+                                         GROUP BY h.SQL_Plan_Line_ID, NVL(h.QC_Session_ID, h.Session_ID), Sample_ID   -- Accumulate all PQ values ​​over the session
                                         )
                                 GROUP BY SQL_Plan_Line_ID
                               ", mp.dbid, @min_snap_id, @max_snap_id+1, @sql_id, mp.plan_hash_value, @time_selection_start, @time_selection_end].concat(ash_where_values)
 
         @min_sample_time = nil
         @max_sample_time = nil
-        ash_hash = {} # Umkopieren in Hash um eindeutige Zugriffe zu landen
+        ash_hash = {} # Copy and paste into a hash to obtain unique access data.
         ash.each do |a|
           ash_hash[a.sql_plan_line_id] = a
           @min_sample_time = a.min_sample_time if @min_sample_time.nil? || a.min_sample_time < @min_sample_time
           @max_sample_time = a.max_sample_time if @max_sample_time.nil? || a.max_sample_time > @max_sample_time
         end
 
-        # Zuordnen der ASH-Zeilen zu den korrespondierenden Plan-Zeilen
+        # Assigning the ASH lines to the corresponding plan lines
         mp[:plans].each do |p|
           a = ash_hash[p.original_id]
           if a
@@ -810,7 +810,7 @@ class DbaHistoryController < ApplicationController
               p[key] = value
             end
           end
-          p.extend TolerantSelectHashHelper   # Erlaibt Methoden-Aufrufe auf nicht deklarierte Element mit return nil
+          p.extend TolerantSelectHashHelper   # Allows method calls on undeclared elements with return null
         end
 
       end
@@ -819,13 +819,13 @@ class DbaHistoryController < ApplicationController
     end
 
 
-    # Identität der einzelnen Zeilen prüfen und setzen
+    #  Check the identity of each line and set it.
     max_plan_length = 0
     @multiplans.each do |mp|
       max_plan_length = mp[:plans].count if max_plan_length < mp[:plans].count
     end
 
-    def plan_line_hash(line)  # Kriterium für Vergleich zweier Zeilen
+    def plan_line_hash(line)  # Criterion for comparing two lines
       return 0 unless line
       line.id.hash + line.parent_id.hash + line.operation.hash + line.options.hash + line.object_owner.hash +
           (line.object_name && line.object_name[':TQ%'] ? "Hugo" : line.object_name).hash +
@@ -834,14 +834,14 @@ class DbaHistoryController < ApplicationController
 
     (0..max_plan_length - 1).each {|row_index|
       @multiplans.each do |mp|
-        mp[:plans][row_index][:plan_different] = false if mp[:plans][row_index] # Default, fall später nichts abweichendes festgestellt
+        mp[:plans][row_index][:plan_different] = false if mp[:plans][row_index] # Default, unless otherwise determined later
       end
 
       test_hash = plan_line_hash(@multiplans[0][:plans][row_index])
       (1..@multiplans.count - 1).each {|mp_index|
         if plan_line_hash(@multiplans[mp_index][:plans][row_index]) != test_hash
           @multiplans.each do |mp|
-            mp[:plans][row_index][:plan_different] = true if mp[:plans][row_index] # Merken differenz auf Zeilenebene
+            mp[:plans][row_index][:plan_different] = true if mp[:plans][row_index] # Remember the difference at the row level
           end
         end
       }
@@ -895,7 +895,7 @@ class DbaHistoryController < ApplicationController
 
     @groupby = 'snap' if @groupby.nil? || @groupby == ''  # Default
     case @groupby.to_s
-      when "snap" then        # Direkte Anzeige der Snapshots
+      when "snap" then        # Direct display of snapshots
         @begin_interval_sql = "ss.Begin_Interval_Time"
         @end_interval_sql   = "ss.End_Interval_Time"
       when "hour" then
@@ -998,9 +998,9 @@ class DbaHistoryController < ApplicationController
     render_partial :list_sql_history_snapshots
   end #list_sql_history_snapshots
 
-  # Ermittlung der Treffer
+  # Determination of hits
   def show_using_sqls_historic
-    save_session_time_selection     # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection     # Buffer values ​​for later reuse
     @instance     = prepare_param_instance
     @dbid         = prepare_param_dbid
     @object_owner = params[:ObjectOwner]
@@ -1066,10 +1066,10 @@ FROM (
         JOIN   DBA_Hist_Snapshot snap ON snap.DBID = s.DBID AND snap.Instance_Number = s.Instance_Number AND snap.Snap_ID = s.Snap_ID
         JOIN   (
                 SELECT /*+ NO_MERGE*/ DBID, Instance_Number,
-                       MAX(CASE WHEN Begin_Interval_time+#{client_tz_offset_days} <= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}') THEN Snap_ID ELSE NULL END) StartMin,      -- Normaler Start-Schnappschuss
-                       MIN(CASE WHEN Begin_Interval_time+#{client_tz_offset_days} >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}') THEN Snap_ID ELSE NULL END) StartMax,      -- alternativer Start-Schnappschuss wenn StartMin=NULL
-                       MAX(CASE WHEN End_Interval_time+#{client_tz_offset_days} <= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}') THEN Snap_ID ELSE NULL END) EndMin,          -- alternativer End-Schnappschuss, wenn EndMin=NULL
-                       MIN(CASE WHEN End_Interval_time+#{client_tz_offset_days} >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}') THEN Snap_ID ELSE NULL END) EndMax           -- Normaler End-Schnappschuss
+                       MAX(CASE WHEN Begin_Interval_time+#{client_tz_offset_days} <= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}') THEN Snap_ID ELSE NULL END) StartMin,      -- Normal start snapshot
+                       MIN(CASE WHEN Begin_Interval_time+#{client_tz_offset_days} >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}') THEN Snap_ID ELSE NULL END) StartMax,      -- Alternative start snapshot if StartMin=NULL
+                       MAX(CASE WHEN End_Interval_time+#{client_tz_offset_days} <= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}') THEN Snap_ID ELSE NULL END) EndMin,          -- Alternative end snapshot if EndMin=NULL
+                       MIN(CASE WHEN End_Interval_time+#{client_tz_offset_days} >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}') THEN Snap_ID ELSE NULL END) EndMax           -- Normal end snapshot
                 FROM   DBA_Hist_Snapshot
                 WHERE  DBID = ?
                 GROUP BY Instance_Number, DBID
@@ -1100,15 +1100,15 @@ FROM (
 
   end
 
-  # Anzeigen der gefundenen Events
+  # Displaying the found events
   def list_system_events_historic
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
-    save_session_time_selection                  # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection                  # Buffer values ​​for later reuse
 
     additional_where1 = String.new
     additional_where2 = String.new
-    binds = [@dbid]  # 1. Bindevariable
+    binds = [@dbid]  # 1. Bind variable
     if @instance && @instance != 0
       additional_where1 << " AND Instance_Number = ? "
       binds << @instance
@@ -1130,7 +1130,7 @@ FROM (
       All_snaps AS (SELECT /*+ NO_MERGE MATERIALIZE */ DBID, Instance_Number, Snap_ID, Min_Snap_ID, Max_Snap_ID
                     FROM   Snaps
                     UNION ALL
-                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Predecessor of the first one with evaluation for difference per LAG */
                            MIN(Min_Snap_ID) Min_Snap_ID,  MAX(Max_Snap_ID) Max_Snap_ID
                     FROM   Snaps
                     GROUP BY DBID, Instance_Number
@@ -1163,8 +1163,8 @@ FROM (
                       FROM   All_Snaps ss
                       JOIN   DBA_Hist_System_Event ev ON ev.DBID = ss.DBID AND ev.Instance_Number = ss.Instance_Number AND ev.Snap_ID = ss.Snap_ID
                     ) hist
-              WHERE  hist.Waits >= 0    /* Ersten Snap nach Reboot ausblenden */
-              AND    hist.Snap_ID >= hist.Min_Snap_ID  /* Vorgaenger des ersten Snap fuer LAG wieder ausblenden */
+              WHERE  hist.Waits >= 0    /* Hide first snap after reboot */
+              AND    hist.Snap_ID >= hist.Min_Snap_ID  /* Hide predecessors of the first Snap for LAG again */
               GROUP BY DBID, Instance_Number, Event_ID
              ) hist
       #{additional_where2}
@@ -1173,7 +1173,7 @@ FROM (
     render_partial
   end
 
-  # Anzeigen der Snapshots zum Event
+  # View snapshots of the event
   def list_system_events_historic_detail
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
@@ -1207,10 +1207,10 @@ FROM (
               WHERE DBID = ?
               AND   Instance_Number = ?
               AND   Event_ID = ?
-              AND   Snap_ID BETWEEN ?-1 AND ? /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+              AND   Snap_ID BETWEEN ?-1 AND ? /* Predecessor of the first one with evaluation for difference per LAG */
              ) hist
       JOIN   DBA_Hist_Snapshot snap ON (snap.DBID = ? AND snap.Instance_Number = ? AND snap.Snap_ID = hist.Snap_ID)
-      WHERE  hist.Waits >= 0    /* Ersten Snap nach Reboot ausblenden */
+      WHERE  hist.Waits >= 0    /* Hide first snap after reboot */
       AND    hist.Snap_ID BETWEEN ? AND ?
       ORDER BY hist.Snap_ID",
       @dbid, @instance, @event_id, @min_snap_id, @max_snap_id,
@@ -1220,7 +1220,7 @@ FROM (
   end
 
 
-  # Auswahl-Dialog
+  # Selection dialog
   def show_system_statistics_historic
     @statclasses = [{:bit=> nil, :name => "[All classes]"}]
     statistic_classes.each do |s|
@@ -1234,13 +1234,13 @@ FROM (
     render_partial
   end
 
-  # Anzeige Snapshots aus DBA_Hist_Sysstat
+  # Displaying snapshots from DBA_Hist_Sysstat
   def list_system_statistics_historic
     @instance  = prepare_param_instance
-    @stat_class_bit = params[:stat_class][:bit]    # Bit-wert fuer Test auf Statistic-Klasse
+    @stat_class_bit = params[:stat_class][:bit]    # Bit value for test on statistics class
     @stat_class_bit = nil if @stat_class_bit == ""
 
-    save_session_time_selection                   # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection                   # Buffer values ​​for later reuse
 
     list_system_statistics_historic_sum if params[:sum]
     list_system_statistics_historic_full if params[:full]
@@ -1256,7 +1256,7 @@ FROM (
 
 
     additional_where = String.new
-    binds = [prepare_param_dbid]  # 1. Bindevariablen
+    binds = [prepare_param_dbid]  # 1. Bind variablen
     if @instance
       additional_where << " AND   Instance_Number = ? "
       binds << @instance
@@ -1275,7 +1275,7 @@ FROM (
       All_snaps AS (SELECT /*+ NO_MERGE MATERIALIZE */ DBID, Instance_Number, Snap_ID, Min_Snap_ID, Max_Snap_ID, Begin_Interval_Time, End_Interval_Time
                     FROM   Snaps
                     UNION ALL
-                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Predecessor of the first one with evaluation for difference per LAG */
                            MIN(Min_Snap_ID) Min_Snap_ID,  MAX(Max_Snap_ID) Max_Snap_ID, MIN(Begin_Interval_time), MAX(End_Interval_Time)
                     FROM   Snaps
                     GROUP BY DBID, Instance_Number
@@ -1290,8 +1290,8 @@ FROM (
               JOIN   DBA_Hist_SysStat st ON st.DBID=ss.DBID AND st.Instance_Number=ss.Instance_Number AND st.Snap_ID = ss.Snap_ID
               #{"JOIN v$StatName sn ON sn.Stat_ID = st.Stat_ID AND BITAND(sn.Class, #{@stat_class_bit.to_i}) = #{@stat_class_bit.to_i}" if @stat_class_bit}
             ) hist
-      WHERE  hist.Value >= 0    /* Ersten Snap nach Reboot ausblenden */
-      AND    hist.Snap_ID >= hist.Min_Snap_ID /* Vorgaenger des ersten Snap fuer LAG wieder ausblenden */
+      WHERE  hist.Value >= 0    /* Hide first snap after reboot */
+      AND    hist.Snap_ID >= hist.Min_Snap_ID /* Hide predecessors of the first Snap for LAG again */
       GROUP BY Rounded_Begin_Interval_Time, hist.Stat_ID
       ORDER BY 1, Stat_ID"].concat(binds)
 
@@ -1303,26 +1303,26 @@ FROM (
               ORDER BY n.Class, n.Statistic#", prepare_param_dbid ]
 
 
-    @stats = []      # Komplettes Result
-    rec = {}        # einzelner Record des Results
-    columns = {}    # Verwendete Statistiken mit Value != 0
+    @stats = []      # Complete result
+    rec = {}        # single record of the result
+    columns = {}    # Statistics used with value != 0
     ts = nil
     empty = true
     single_stats.each do |s|
       empty = false
       if ts != s.rounded_begin_interval_time
-        @stats << rec if ts    # Wegschreiben des gebauten Records (ausser bei erstem Durchlauf)
-        rec = {  # Neuer Record
+        @stats << rec if ts    # Write the built record (except on the first pass)
+        rec = {  # New record
                  rounded_begin_interval_time: s.rounded_begin_interval_time,
                  min_begin_interval_time:     s.min_begin_interval_time,
                  max_end_interval_time:       s.max_end_interval_time
         }
-        ts = s.rounded_begin_interval_time                                          # Vergleichswert fur naechsten Record
+        ts = s.rounded_begin_interval_time                                          # Benchmark for the next record
       end
-      rec[s.stat_id] = s.value if s.value != 0      # 0-Values nicht speichern
-      columns[s.stat_id] = true if s.value != 0     # Statistik als verwendet kennzeichnen
+      rec[s.stat_id] = s.value if s.value != 0      # Do not save 0 values
+      columns[s.stat_id] = true if s.value != 0     # Mark statistics as used
     end
-    @stats << rec  unless empty         # letzten Record wegschreiben, wenn Result exitierte
+    @stats << rec  unless empty         # Write away the last record if the result existed.
 
     column_options =
     [
@@ -1335,7 +1335,7 @@ FROM (
       }
     ]
     statnames.each do |sn|
-      if columns[sn.stat_id]              # Statistik kommt auch im Result vor
+      if columns[sn.stat_id]              # Statistics also appear in the result.
         column_options << {
           :caption=>sn.stat_name,
           :data=>proc{|rec| fn(rec[sn.stat_id] ? rec[sn.stat_id] : 0)},
@@ -1362,7 +1362,7 @@ FROM (
 
   def list_system_statistics_historic_sum
     additional_where = String.new
-    binds = [prepare_param_dbid]  # 1. Bindevariable
+    binds = [prepare_param_dbid]  # 1. Bind variable
     if @instance 
       additional_where << " AND   Instance_Number = ? "
       binds << @instance
@@ -1381,7 +1381,7 @@ FROM (
       All_snaps AS (SELECT /*+ NO_MERGE MATERIALIZE */ DBID, Instance_Number, Snap_ID, Min_Snap_ID, Max_Snap_ID
                     FROM   Snaps
                     UNION ALL
-                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Predecessor of the first one with evaluation for difference per LAG */
                            MIN(Min_Snap_ID) Min_Snap_ID,  MAX(Max_Snap_ID) Max_Snap_ID
                     FROM   Snaps
                     GROUP BY DBID, Instance_Number
@@ -1401,8 +1401,8 @@ FROM (
                              ) st ON st.DBID=ss.DBID AND st.Instance_Number=ss.Instance_Number AND st.Snap_ID = ss.Snap_ID
                       #{"JOIN v$StatName sn ON sn.Stat_ID = st.Stat_ID AND BITAND(sn.Class, #{@stat_class_bit.to_i}) = #{@stat_class_bit.to_i}" if @stat_class_bit}
                     ) hist
-              WHERE  hist.Value >= 0    /* Ersten Snap nach Reboot ausblenden */
-              AND    hist.Snap_ID >= hist.Min_Snap_ID /* Vorgaenger des ersten Snap fuer LAG wieder ausblenden */
+              WHERE  hist.Value >= 0    /* Hide first snap after reboot */
+              AND    hist.Snap_ID >= hist.Min_Snap_ID /* Hide predecessors of the first Snap for LAG again */
               GROUP BY DBID, Instance_Number, Stat_ID
              ) hist
       JOIN   DBA_Hist_Stat_Name name ON name.DBID=hist.DBID AND name.Stat_ID = hist.Stat_ID
@@ -1430,10 +1430,10 @@ FROM (
               WHERE DBID = ?
               AND   Instance_Number = ?
               AND   Stat_ID = ?
-              AND   Snap_ID BETWEEN ?-1 AND ? /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+              AND   Snap_ID BETWEEN ?-1 AND ? /* Predecessor of the first one with evaluation for difference per LAG */
              ) hist
       JOIN   DBA_Hist_Snapshot snap ON (snap.DBID = ? AND snap.Instance_Number = ? AND snap.Snap_ID = hist.Snap_ID)
-      WHERE  hist.Value >= 0    /* Ersten Snap nach Reboot ausblenden */
+      WHERE  hist.Value >= 0    /* Hide first snap after reboot */
       AND    hist.Snap_ID BETWEEN ? AND ?
       ORDER BY hist.Snap_ID",
       @dbid, @instance, @stat_id, @min_snap_id, @max_snap_id,
@@ -1464,13 +1464,13 @@ FROM (
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
     trunc_tag = params[:grouping][:tag]
-    save_session_time_selection                   # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection                   # Buffer values ​​for later reuse
 
     time_expression = "TRUNC(Begin_Time, '#{trunc_tag}')"   # Default- TRUNC
-    time_expression = "Begin_Time" if trunc_tag == "SS"     # Bei Sekunden nicht weiter verdichten, sondern kleinstes Korn nehmen
+    time_expression = "Begin_Time" if trunc_tag == "SS"     # Do not compact further for seconds, but take the smallest grain.
 
     additional_where = String.new
-    binds = [@dbid]  # 1. Bindevariablen
+    binds = [@dbid]  # 1. Bind variable
     binds.concat [@time_selection_start, @time_selection_end, @time_selection_end]
     if @instance
       additional_where << " AND   Instance_Number = ? "
@@ -1503,7 +1503,7 @@ FROM (
                               WHERE  Group_ID = 2 -- System Metrics Long Duration
                              )
                       WHERE  Begin_Time >= TO_DATE(?, '#{sql_datetime_mask(@time_selection_start)}')
-                      AND    Begin_Time  < TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}') -- Hilfe fuer Index-Zugriff, größter beginn auf alle Faelle vor groesstem Ende
+                      AND    Begin_Time  < TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}') -- Help for index access, largest beginning in any case before largest end
                       AND    End_Time   <= TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}')
                       #{additional_where}
                       GROUP BY #{time_expression} , Metric_ID, Metric_Name, Metric_Unit
@@ -1533,7 +1533,7 @@ FROM (
                               WHERE  Group_ID = 2 -- System Metrics Long Duration
                              )
                       WHERE  Begin_Time >= TO_DATE(?, '#{sql_datetime_mask(@time_selection_start)}')
-                      AND    Begin_Time  < TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}') -- Hilfe fuer Index-Zugriff, größter beginn auf alle Faelle vor groesstem Ende
+                      AND    Begin_Time  < TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}') -- Help for index access, largest beginning in any case before largest end
                       AND    End_Time   <= TO_DATE(?, '#{sql_datetime_mask(@time_selection_end)}')
                       #{additional_where}
                       GROUP BY #{time_expression} , Metric_ID, Metric_Name, Metric_Unit
@@ -1545,22 +1545,22 @@ FROM (
 
     single_stats = sql_select_iterator [stmt].concat(binds)
 
-    @stats = []                                                                 # Komplettes Result
-    record = {}                                                                 # einzelner Record des Results
-    columns = {}                                                                # Verwendete Statistiken mit Value != 0
+    @stats = []                                                                 # Complete result
+    record = {}                                                                 # single record of the result
+    columns = {}                                                                # Statistics used with value != 0
     ts = nil
     empty = true
     single_stats.each do |s|
       empty = false
       if ts != s.begin_time
-        @stats << record if ts                                                  # Wegschreiben des gebauten Records (ausser bei erstem Durchlauf)
-        record = {:begin_time => s.begin_time }                                 # Neuer Record
-        ts = s.begin_time                                                       # Vergleichswert fur naechsten Record
+        @stats << record if ts                                                  # Write the built record (except on the first pass)
+        record = {:begin_time => s.begin_time }                                 # New record
+        ts = s.begin_time                                                       # Benchmark for the next record
       end
-      record[s.metric_id] = {:value=>s.value, :minvalue=>s.minvalue, :maxvalue=>s.maxvalue } if s.value != 0    # 0-Values nicht speichern
-      columns[s.metric_id] = {:metric_name=>s.metric_name, :metric_unit=>s.metric_unit} if s.value != 0   # Statistik als verwendet kennzeichnen
+      record[s.metric_id] = {:value=>s.value, :minvalue=>s.minvalue, :maxvalue=>s.maxvalue } if s.value != 0    # Do not save 0 values
+      columns[s.metric_id] = {:metric_name=>s.metric_name, :metric_unit=>s.metric_unit} if s.value != 0   # Mark statistics as used
     end
-    @stats << record  unless empty                                              # letzten Record wegschreiben, wenn Result exitierte
+    @stats << record  unless empty                                              # Write away the last record if the result existed.
 
     @column_options =
     [
@@ -1577,7 +1577,7 @@ FROM (
   def list_system_time_model_historic
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
 
     where_string = String.new
     where_values = []
@@ -1600,10 +1600,10 @@ FROM (
               FROM   DBA_Hist_Sys_Time_Model
               WHERE DBID = ?
               #{where_string}
-              AND   Snap_ID BETWEEN ?-1 AND ? /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+              AND   Snap_ID BETWEEN ?-1 AND ? /* Predecessor of the first one with evaluation for difference per LAG */
              ) hist
       JOIN   DBA_Hist_Snapshot snap ON snap.DBID = ? AND snap.Instance_Number = hist.Instance_Number AND snap.Snap_ID = hist.Snap_ID
-      WHERE  hist.Value >= 0    /* Ersten Snap nach Reboot ausblenden */
+      WHERE  hist.Value >= 0    /* Hide first snap after reboot */
       AND    hist.Snap_ID BETWEEN ? AND ?
       AND    snap.End_Interval_Time+#{client_tz_offset_days}   >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}')
       AND    snap.Begin_Interval_Time+#{client_tz_offset_days} <= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}')
@@ -1637,11 +1637,11 @@ FROM (
   def list_latch_statistics_historic
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
 
 
-    where_string  = String.new                         # Filter-Text für nachfolgendes Statement
-    where_values = [@dbid, @time_selection_start, @time_selection_end, @dbid]    # Filter-werte für nachfolgendes Statement
+    where_string  = String.new                         # Filter text for the following statement
+    where_values = [@dbid, @time_selection_start, @time_selection_end, @dbid]    # Filter values ​​for the following statement
     if @instance
       where_string << " AND l.Instance_Number = ?"
       where_values << @instance
@@ -1657,9 +1657,9 @@ FROM (
                      l.Latch_Hash,
                      l.Latch_Name,
                      l.Level# LevelNo,
-                     COUNT(*)-1                 Anzahl_Samples,         -- mitgelesenen Vorgänger-Sample der Selektion wieder abziehen
-                     MIN(snap.First_Occurrence) First_Occurrence,       -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
-                     MAX(snap.Last_Occurrence)  Last_Occurrence,        -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
+                     COUNT(*)-1                 Anzahl_Samples,         -- subtract the previously read sample from the selection
+                     MIN(snap.First_Occurrence) First_Occurrence,       -- Pseudo-group function, values ​​in group are all identical
+                     MAX(snap.Last_Occurrence)  Last_Occurrence,        -- Pseudo-group function, values ​​in group are all identical
                      MAX(l.Gets)             KEEP (DENSE_RANK LAST ORDER BY l.Snap_ID) - MIN(l.Gets)             KEEP (DENSE_RANK FIRST ORDER BY l.Snap_ID) GetsNo,
                      MAX(l.Misses)           KEEP (DENSE_RANK LAST ORDER BY l.Snap_ID) - MIN(l.Misses)           KEEP (DENSE_RANK FIRST ORDER BY l.Snap_ID) Misses,
                      MAX(l.Sleeps)           KEEP (DENSE_RANK LAST ORDER BY l.Snap_ID) - MIN(l.Sleeps)           KEEP (DENSE_RANK FIRST ORDER BY l.Snap_ID) Sleeps,
@@ -1671,8 +1671,8 @@ FROM (
                      MAX(l.Sleep3)           KEEP (DENSE_RANK LAST ORDER BY l.Snap_ID) - MIN(l.Sleep3)           KEEP (DENSE_RANK FIRST ORDER BY l.Snap_ID) Sleep3,
                      MAX(l.Sleep4)           KEEP (DENSE_RANK LAST ORDER BY l.Snap_ID) - MIN(l.Sleep4)           KEEP (DENSE_RANK FIRST ORDER BY l.Snap_ID) Sleep4,
                      (MAX(l.Wait_Time)       KEEP (DENSE_RANK LAST ORDER BY l.Snap_ID) - MIN(l.Wait_Time)        KEEP (DENSE_RANK FIRST ORDER BY l.Snap_ID) )/1000000 Wait_Time,
-                     MIN(snap.Min_Snap_ID)      Min_Snap_ID,            -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
-                     MAX(snap.Max_Snap_ID)      Max_Snap_ID             -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
+                     MIN(snap.Min_Snap_ID)      Min_Snap_ID,            -- Pseudo-group function, values ​​in group are all identical
+                     MAX(snap.Max_Snap_ID)      Max_Snap_ID             -- Pseudo-group function, values ​​in group are all identical
               FROM   DBA_Hist_Latch l
               JOIN   (SELECT Instance_Number,
                              MIN(Snap_ID) Min_Snap_ID,
@@ -1729,7 +1729,7 @@ FROM (
               JOIN   DBA_Hist_Snapshot snap ON snap.DBID=l.DBID AND snap.Instance_Number=l.Instance_Number AND snap.Snap_ID=l.Snap_ID
               WHERE  l.dbid = ?
               AND    l.Instance_Number = ?
-              AND    l.Snap_ID+1 >= ?         -- Letzten Sample vor Selektion mit holen, um Differenz zu erstem Sample der Selektion zu bilden
+              AND    l.Snap_ID+1 >= ?         -- Retrieve the last sample before selection to calculate the difference to the first sample of the selection.
               AND    l.Snap_ID <= ?
               AND    l.Latch_Hash = ?
              ) x
@@ -1744,7 +1744,7 @@ FROM (
 
   def list_mutex_statistics_historic
     @instance  = prepare_param_instance
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     list_mutex_statistics_historic_blocker_waiter(:Blocking_Session)      if params[:Blocker]
     list_mutex_statistics_historic_blocker_waiter(:Requesting_Session)    if params[:Waiter]
     list_mutex_statistics_historic_Timeline                               if params[:Timeline]
@@ -1793,7 +1793,7 @@ FROM (
   end
 
 
-  # Anzeige der Einzel-Records
+  # Display of individual records
   def list_mutex_statistics_historic_samples
     @instance  = prepare_param_instance
     @time_selection_start = params[:time_selection_start]
@@ -1802,8 +1802,8 @@ FROM (
     @filter               = prepare_param(:filter)
     @filter_value         = prepare_param(:filter_value)
 
-    where_string  = String.new                         # Filter-Text für nachfolgendes Statement
-    where_values = [@time_selection_start, @time_selection_end]    # Filter-werte für nachfolgendes Statement
+    where_string  = String.new                         # Filter text for the following statement
+    where_values = [@time_selection_start, @time_selection_end]    # Filter values ​​for the following statement
     if @instance
       where_string << " AND Inst_ID = ?"
       where_values << @instance
@@ -1836,11 +1836,11 @@ FROM (
   def list_enqueue_statistics_historic
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
 
 
-    where_string  = String.new                         # Filter-Text für nachfolgendes Statement
-    where_values = [@dbid, @time_selection_start, @time_selection_end, @dbid]    # Filter-werte für nachfolgendes Statement
+    where_string  = String.new                         # Filter text for the following statement
+    where_values = [@dbid, @time_selection_start, @time_selection_end, @dbid]    # Filter values ​​for the following statement
     if @instance
       where_string << " AND h.Instance_Number = ?"
       where_values << @instance
@@ -1853,9 +1853,9 @@ FROM (
       FROM   (SELECT
                      h.Instance_Number,
                      h.Event#                   EventNo,
-                     COUNT(*)-1                 Anzahl_Samples,         -- mitgelesenen Vorgänger-Sample der Selektion wieder abziehen
-                     MIN(snap.First_Occurrence) First_Occurrence,       -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
-                     MAX(snap.Last_Occurrence)  Last_Occurrence,        -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
+                     COUNT(*)-1                 Anzahl_Samples,         -- subtract the previously read sample from the selection
+                     MIN(snap.First_Occurrence) First_Occurrence,       -- Pseudo-group function, values ​​in group are all identical
+                     MAX(snap.Last_Occurrence)  Last_Occurrence,        -- Pseudo-group function, values ​​in group are all identical
                      MIN(h.EQ_Type)             EQ_Type,
                      MIN(h.Req_Reason)          Req_Reason,
                      MAX(h.Total_Req#)       KEEP (DENSE_RANK LAST ORDER BY h.Snap_ID) - MIN(h.Total_Req#)       KEEP (DENSE_RANK FIRST ORDER BY h.Snap_ID) Total_Req,
@@ -1863,8 +1863,8 @@ FROM (
                      MAX(h.Succ_Req#)        KEEP (DENSE_RANK LAST ORDER BY h.Snap_ID) - MIN(h.Succ_Req#)        KEEP (DENSE_RANK FIRST ORDER BY h.Snap_ID) Succ_Req,
                      MAX(h.Failed_Req#)      KEEP (DENSE_RANK LAST ORDER BY h.Snap_ID) - MIN(h.Failed_Req#)      KEEP (DENSE_RANK FIRST ORDER BY h.Snap_ID) Failed_Req,
                      MAX(h.Cum_Wait_Time)    KEEP (DENSE_RANK LAST ORDER BY h.Snap_ID) - MIN(h.Cum_Wait_Time)    KEEP (DENSE_RANK FIRST ORDER BY h.Snap_ID) Cum_Wait_Time,
-                     MIN(snap.Min_Snap_ID)      Min_Snap_ID,            -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
-                     MAX(snap.Max_Snap_ID)      Max_Snap_ID             -- Pseudo-Group-Funktion, Werte in Gruppe sind alle identisch
+                     MIN(snap.Min_Snap_ID)      Min_Snap_ID,            -- Pseudo-group function, values ​​in group are all identical
+                     MAX(snap.Max_Snap_ID)      Max_Snap_ID             -- Pseudo-group function, values ​​in group are all identical
               FROM   DBA_Hist_Enqueue_Stat h
               JOIN   (SELECT Instance_Number,
                              MIN(Snap_ID) Min_Snap_ID,
@@ -1915,7 +1915,7 @@ FROM (
               JOIN   DBA_Hist_Snapshot snap ON snap.DBID=h.DBID AND snap.Instance_Number=h.Instance_Number AND snap.Snap_ID=h.Snap_ID
               WHERE  h.dbid = ?
               AND    h.Instance_Number = ?
-              AND    h.Snap_ID+1 >= ?         -- Letzten Sample vor Selektion mit holen, um Differenz zu erstem Sample der Selektion zu bilden
+              AND    h.Snap_ID+1 >= ?         -- Retrieve the last sample before selection to calculate the difference to the first sample of the selection.
               AND    h.Snap_ID <= ?
               AND    h.Event# = ?
              ) x
@@ -1939,7 +1939,7 @@ FROM (
     @sql_id     = params[:sql_id]
     @sql_id = nil if @sql_id == ""
 
-    # !!! Kein Filter auf DBID in diesem SQL, damit nach Abzug und Neuaufbau einer DB die Historien miteinander verglichen werden können
+   # !!! No filter on DBID in this SQL, so that histories can be compared after deleting and rebuilding a database.
     where_string = " WHERE TRUNC(ss.Begin_Interval_Time)+#{client_tz_offset_days} = TO_TIMESTAMP(?, '#{sql_datetime_date_mask}') "
     where_string_global = String.new
     where_values1 = [@tag1]
@@ -2085,7 +2085,7 @@ FROM (
   end
 
   private
-  # min und max. Snap_ID für gegebenen Zeitraum und Instance (nullable)
+  # min and max. Snap_ID for a given time period and instance (nullable)
   # get latest snapshot before period and first after period
   # @return [[Integer, Integer]] min_snap_id, max_snap_id
   def get_min_max_snapshot(instance, time_selection_start, time_selection_end, dbid)
@@ -2095,7 +2095,7 @@ FROM (
                                    AND    End_Interval_Time+#{client_tz_offset_days} < TO_TIMESTAMP(?, '#{sql_datetime_mask(time_selection_start)}')
                                    #{' AND Instance_Number = ?' if instance}
                                   ", dbid, time_selection_start].concat(instance ? [instance] : [])
-    if min_snap_id.nil?                                                      # Ersten Snap nehmen wenn keiner zum start gefunden
+    if min_snap_id.nil?                                                      # Take the first snap if no one else is found to start with.
       min_snap_id = sql_select_one ["SELECT MIN(Snap_ID)
                                       FROM   DBA_Hist_Snapshot
                                       WHERE  DBID = ?
@@ -2110,7 +2110,7 @@ FROM (
                                    #{' AND Instance_Number = ?' if instance}
                                    ", dbid, time_selection_end].concat(instance ? [instance] : [])
 
-    if max_snap_id.nil?                                                        # Letzten Snap nehmen wenn keiner zum Endezeitpunkt gefunden
+    if max_snap_id.nil?                                                        # Take the last snap if none are found by the end time.
       max_snap_id = sql_select_one ["SELECT MAX(Snap_ID)
                                      FROM   DBA_Hist_Snapshot
                                      WHERE  DBID = ?
@@ -2127,7 +2127,7 @@ FROM (
   public
 
   def list_performance_hub_report
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
     @realtime  = params[:realtime] == '1'
@@ -2157,14 +2157,14 @@ FROM (
                                    .concat(@realtime ? [] : [@time_selection_end, @time_selection_end])
     end
 
-    @report.gsub!(/http:/, 'https:') if request.original_url['https://']        # Request kommt mit https, dann müssen <script>-Includes auch per https abgerufen werden, sonst wird page geblockt wegen insecure content
+    @report.gsub!(/http:/, 'https:') if request.original_url['https://']        # If the request comes via https, then <script> includes must also be retrieved via https, otherwise the page will be blocked due to insecure content.
 
     @report.sub!(/<head>/, "<he ad><title>Performance Hub Report</title>")
     render :json => { action: 'show_in_new_tab', result: @report}.to_json
   end
 
   def list_awr_report_html
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
 
@@ -2182,7 +2182,7 @@ FROM (
   end
 
   def list_awr_global_report_html
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
 
@@ -2200,7 +2200,7 @@ FROM (
   end
 
   def list_ash_report_html
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
 
     @report = sql_select_iterator ["SELECT output FROM TABLE(DBMS_WORKLOAD_REPOSITORY.ASH_REPORT_HTML(?, ?,
@@ -2216,7 +2216,7 @@ FROM (
   end
 
   def list_ash_global_report_html
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
 
@@ -2236,7 +2236,7 @@ FROM (
 
 
   def list_awr_sql_report_html
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
     @dbid      = prepare_param_dbid
     @sql_id    = params[:sql_id]
@@ -2437,7 +2437,7 @@ END;
     @sql_id      = params[:sql_id]    == '' ? nil : params[:sql_id]
     @sid         = params[:sid]       == '' ? nil : params[:sid]
     @serial_no    = params[:serial_no]  == '' ? nil : params[:serial_no]
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
 
     where_string_hist = String.new
     where_string_sga  = String.new
@@ -2585,7 +2585,7 @@ END;
     if report.nil?
       render :html => "No SQL-Monitor report found for ID=#{report_id}"
     else
-      if request.original_url['https://']                                         # Request kommt mit https, dann müssen <script>-Includes auch per https abgerufen werden, sonst wird page geblockt wegen insecure content
+      if request.original_url['https://']                                         # If the request comes via https, then <script> includes must also be retrieved via https, otherwise the page will be blocked due to insecure content.
         report.gsub!(/http:/, 'https:')
       end
       report.sub!(/<head>/, "<head><title>SQL Monitor Report for SQL-ID #{sql_id}</title>")
@@ -2594,7 +2594,7 @@ END;
   end
 
   def list_os_statistics_historic
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
     @instance  = prepare_param_instance
 
     osstats = sql_select_iterator ["\

@@ -258,7 +258,7 @@ While selecting this view it's contents in SGA will be deleted. That means, this
 Value for 'No. Items flushed from shared pool' from 7..8 is normal, higher values indicate problems to find place in shared pool.
 Role DBA is required to execute this selection.
 "),
-            :sql=>  "SELECT /* DB-Tools Ramm  Verdreaengung Shared Pool */
+            :sql=>  "SELECT /* DB-Tools  Verdreaengung Shared Pool */
                          RAWTOHEX(Addr)         \"row-address in array or SGA\",
                          Indx         \"index in fixed table array\",
                          Inst_ID      \"Instance\",

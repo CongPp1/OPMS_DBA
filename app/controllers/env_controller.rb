@@ -399,7 +399,7 @@ class EnvController < ApplicationController
       All_snaps AS (SELECT /*+ NO_MERGE MATERIALIZE */ DBID, Instance_Number, Snap_ID, Min_Snap_ID, Max_Snap_ID, Begin_Interval_Time
                     FROM   Snaps
                     UNION ALL
-                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+                    SELECT DBID, Instance_Number, MIN(Snap_ID-1) Snap_ID, /* Predecessor of the first one with evaluation for difference per LAG */
                            MIN(Min_Snap_ID) Min_Snap_ID,  MAX(Max_Snap_ID) Max_Snap_ID, MIN(Begin_Interval_time)
                     FROM   Snaps
                     GROUP BY DBID, Instance_Number
@@ -414,27 +414,27 @@ class EnvController < ApplicationController
               WHERE  st.Service_Name = ?
               #{where_string}
              )
-      WHERE  Value >= 0    /* Ersten Snap nach Reboot ausblenden */
-      AND    Snap_ID >= Min_Snap_ID /* Vorgaenger des ersten Snap fuer LAG wieder ausblenden */
+      WHERE  Value >= 0    /* Hide first snap after reboot */
+      AND    Snap_ID >= Min_Snap_ID /* Hide predecessors of the first Snap for LAG again */
       GROUP BY Rounded_Begin_Interval_Time, Stat_Name
       ORDER BY Rounded_Begin_Interval_Time, Stat_Name", @dbid, @time_selection_start, @time_selection_end, @service_name].concat(where_values)
 
-    @stats = []      # Komplettes Result
-    rec = {}        # einzelner Record des Results
-    columns = {}    # Verwendete Statistiken mit Value != 0
+    @stats = []      # Complete result
+    rec = {}        # single record of the result
+    columns = {}    # Statistics used with value != 0
     ts = nil
     empty = true
     single_stats.each do |s|
       empty = false
       if ts != s.rounded_begin_interval_time
-        @stats << rec if ts    # Wegschreiben des gebauten Records (ausser bei erstem Durchlauf)
-        rec = {:rounded_begin_interval_time => s.rounded_begin_interval_time }              # Neuer Record
-        ts = s.rounded_begin_interval_time                                          # Vergleichswert fur naechsten Record
+        @stats << rec if ts    # Write the built record (except on the first pass)
+        rec = {:rounded_begin_interval_time => s.rounded_begin_interval_time }              # New record
+        ts = s.rounded_begin_interval_time                                          # Benchmark for the next record
       end
-      rec[s.stat_name] = s.value if s.value != 0      # 0-Values nicht speichern
-      columns[s.stat_name] = true if s.value != 0     # Statistik als verwendet kennzeichnen
+      rec[s.stat_name] = s.value if s.value != 0      # Do not save 0 values
+      columns[s.stat_name] = true if s.value != 0     # Mark statistics as used
     end
-    @stats << rec  unless empty         # letzten Record wegschreiben, wenn Result exitierte
+    @stats << rec  unless empty         # Write away the last record if the result existed.
 
     column_options =
       [
@@ -540,7 +540,7 @@ class EnvController < ApplicationController
 
       if current_database[:save_login] && !Panorama::Application.config.panorama_var_home_user_defined
         add_popup_message("There's no storage location defined for for persistent data!
-That means, this saved login data will be lost at next restart of Panorama backend application!
+That means, this saved login data will be lost at next restart of OPMS backend application!
 To fix this, set config attribute PANORAMA_VAR_HOME to the desired location before starting the backend application")
       end
     end

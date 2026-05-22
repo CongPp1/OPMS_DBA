@@ -320,12 +320,12 @@ module MenuHelper
           <li id='menu_li_help_mailto'><a href='mailto:#{contact_mail_addr}'  id='menu_help_mailto' title='#{t :menu_help_contact_title, :default=> 'Contact to producer'}'>#{t :menu_help_contact_caption, :default=> 'Contact'}</a></li>
 "
     unless Rails.env.test?                                                      # don't flood blog with requests at test
-      output << "          <li id='menu_li_help_blog'><a href='https://rammpeter.blogspot.com/search/label/Panorama%20How-To' id='menu_help_blog' title='#{t :menu_help_wiki_title, :default=> 'Panorama-Blog with news and usage hints'}' target='_blank'>#{t :menu_help_wiki_caption, :default=> 'Blog'}</a></li>
+      output << "          <li id='menu_li_help_blog'><a href='https://rammpeter.blogspot.com/search/label/Panorama%20How-To' id='menu_help_blog' title='#{t :menu_help_wiki_title, :default=> 'OPMS-Blog with news and usage hints'}' target='_blank'>#{t :menu_help_wiki_caption, :default=> 'Blog'}</a></li>
 "
     end
 
     output << "\
-          <li id='menu_li_help_version_history'><a href='https://github.com/rammpeter/panorama/blob/master/CHANGELOG.md' target='_blank' title=''#{t(:menu_help_version_history_hint, :default=>'Development history of features and versions')}''>#{ t(:menu_help_version_history_caption, :default=> 'Version history')}</a></li>
+          <li id='menu_li_help_version_history'><a href='https://github.com/CongPp1/OPMS_DBA/blob/main/CHANGELOG.md' target='_blank' title=''#{t(:menu_help_version_history_hint, :default=>'Development history of features and versions')}''>#{ t(:menu_help_version_history_caption, :default=> 'Version history')}</a></li>
         </ul>
       </li>
     </ul>

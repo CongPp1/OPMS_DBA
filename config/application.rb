@@ -135,7 +135,7 @@ module Panorama
     # Application configuration should go into files in config/initializers
     # -- all .rb files in that directory are automatically loaded.
 
-    logger.info "Panorama for Oracle: Release #{Panorama::VERSION} ( #{Panorama::RELEASE_YEAR}/#{Panorama::RELEASE_MONTH}/#{Panorama::RELEASE_DAY} )"
+    logger.info "OPMS for Oracle: Release #{Panorama::VERSION} ( #{Panorama::RELEASE_YEAR}/#{Panorama::RELEASE_MONTH}/#{Panorama::RELEASE_DAY} )"
     logger.info "Used runtime environments and frameworks:"
     logger.info "   - Java:          #{java.lang.System.getProperty("java.runtime.version")} (#{java.lang.System.getProperty("java.runtime.name")}, #{java.lang.System.getProperty("java.vendor")})"
     logger.info "   - JRE location:  #{java.lang.System.getProperty("java.home")}"

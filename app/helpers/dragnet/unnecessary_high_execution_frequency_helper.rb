@@ -13,7 +13,7 @@ module Dragnet::UnnecessaryHighExecutionFrequencyHelper
 For both constellations problematic statements can be identified by number of block access between two AWR-snapshots.
 '),
             :sql=> "WITH SQLText AS (SELECT /*+ NO_MERGE MATERIALIZE */ DBID, SQL_ID, SQL_Text FROM DBA_Hist_SQLText)
-                    SELECT /* DB-Tools Ramm CacheBuffer */ * FROM (
+                    SELECT /* DB-Tools CacheBuffer */ * FROM (
                       SELECT s.*, SUBSTR(t.SQL_Text,1,600) \"SQL-Text\"
                       FROM (
                                SELECT /*+ NO_MERGE ORDERED */ s.SQL_ID, s.Instance_number \"Instance\",
@@ -72,7 +72,7 @@ WITH Objects AS (SELECT /*+ NO_MERGE MATERIALIZE */ Owner, Table_Name Name, Num_
                  FROM   DBA_Indexes
                  WHERE  Num_Rows < 100000
                 )
-SELECT /*+ USE_NL(t) \"DB-Tools Ramm Zugriff kleiner Objekte\" */ obj.Owner, Obj.Name, obj.Num_Rows, s.*, t.SQL_Text \"SQL-Text\"
+SELECT /*+ USE_NL(t) \"/* DB-Tools  Zugriff kleiner Objekte\" */ obj.Owner, Obj.Name, obj.Num_Rows, s.*, t.SQL_Text \"SQL-Text\"
 FROM   (
         SELECT /*+ NO_MERGE ORDERED */ s.SQL_ID, MIN(snap.Begin_Interval_Time) First_Occurrence, MAX(snap.End_Interval_Time) Last_Occurrence,
                s.Plan_Hash_Value, s.Instance_number \"Instance\",
@@ -173,7 +173,7 @@ This earns little reduction of CPU-contention and runtime.
             :name  => t(:dragnet_helper_91_name, :default=>'Writing statements with unnecessary high execution count due to missing array processing'),
             :desc  => t(:dragnet_helper_91_desc, :default=>'With less rows per execution and high execution count it is often worth to bundle processing with bulk operation or PL/SQL-FORALL-Operationen if they are processed in the same transaction.
 This reduces CPU-contention and runtime.'),
-            :sql=>  "SELECT /* DB-Tools Ramm: Buendelbare Einzeilsatz-Executes */ s.SQL_ID, s.Instance_Number Instance, Parsing_Schema_Name,
+            :sql=>  "SELECT /*  DB-Tools : Buendelbare Einzeilsatz-Executes */ s.SQL_ID, s.Instance_Number Instance, Parsing_Schema_Name,
                              SUM(s.Executions_Delta) Executions,
                              ROUND(SUM(s.Elapsed_Time_Delta)/1000000) Elapsed_Time_Secs,
                              SUM(s.Rows_Processed_Delta) Rows_Processed,

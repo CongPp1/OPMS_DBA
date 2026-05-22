@@ -183,10 +183,10 @@ module ActiveSessionHistoryHelper
     @groupfilter = @groupfilter.to_unsafe_h.to_h.symbolize_keys  if @groupfilter.class == ActionController::Parameters
     raise "Parameter groupfilter should be of class Hash or ActionController::Parameters" if @groupfilter.class != Hash
     @groupby    = groupby                                                       # Instanzvariablen zur nachfolgenden Nutzung
-    @global_where_string  = String.new                                          # Filter-Text für nachfolgendes Statement mit AND-Erweiterung für alle Union-Tabellen
-    @global_where_values = []                                                   # Filter-werte für nachfolgendes Statement für alle Union-Tabellen
-    @dba_hist_where_string  = String.new                                        # Filter-Text für nachfolgendes Statement mit AND-Erweiterung für DBA_Hist_Active_Sess_History
-    @dba_hist_where_values = []                                                 # Filter-werte für nachfolgendes Statement für DBA_Hist_Active_Sess_History
+    @global_where_string  = String.new                                          # Filter text for the following statement mit AND-Erweiterung für alle Union-Tabellen
+    @global_where_values = []                                                   # Filter values ​​for the following statement für alle Union-Tabellen
+    @dba_hist_where_string  = String.new                                        # Filter text for the following statement mit AND-Erweiterung für DBA_Hist_Active_Sess_History
+    @dba_hist_where_values = []                                                 # Filter values ​​for the following statement für DBA_Hist_Active_Sess_History
     @sga_ash_where_string  = String.new
     @sga_ash_where_values = []
 

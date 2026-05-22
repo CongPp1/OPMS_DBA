@@ -136,7 +136,7 @@ class DbaWaitsController < ApplicationController
   def list_gc_request_latency_history
     @instance    = prepare_param_instance
     @dbid        = prepare_param_dbid
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
 
     history = sql_select_iterator ["
       WITH HIST AS (
@@ -157,7 +157,7 @@ class DbaWaitsController < ApplicationController
                  OR sy.Stat_Name LIKE 'g%c% current block receive time'
                  OR sy.Stat_Name LIKE 'g%c% current blocks received'
                 )
-          AND   sy.Snap_ID BETWEEN ss.Min_Snap_ID-1 AND ss.Max_Snap_ID /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+          AND   sy.Snap_ID BETWEEN ss.Min_Snap_ID-1 AND ss.Max_Snap_ID /* Predecessor of the first one with evaluation for difference per LAG */
       )
       SELECT x.*,
              ((gc_cr_block_receive_time / DECODE(gc_cr_blocks_received, NULL, 1, 0, 1, gc_cr_blocks_received)) * 10) Avg_cr_Receive_time_ms,
@@ -256,7 +256,7 @@ class DbaWaitsController < ApplicationController
 
 
   def list_cpu_usage_historic
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     @instance = prepare_param_instance
 
     where_string = "Sample_Time+#{client_tz_offset_days} >= TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_start)}') AND Sample_Time+#{client_tz_offset_days} <  TO_TIMESTAMP(?, '#{sql_datetime_mask(@time_selection_end)}')"
@@ -299,7 +299,7 @@ class DbaWaitsController < ApplicationController
   end
 
   def list_drm_historic
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
 
     @policy_event = prepare_param(:policy_event)
 

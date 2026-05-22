@@ -248,11 +248,11 @@ This selection shows the relevance of access on chained rows compared to total a
                                               AND    ( (SELECT Instance FROM Inst_Filter) IS NULL OR ss.Instance_Number = (SELECT Instance FROM Inst_Filter)    )
                                              ) ss
                                       JOIN   DBA_Hist_SysStat st ON st.DBID=ss.DBID AND st.Instance_Number=ss.Instance_Number
-                                      WHERE  st.Snap_ID = ss.Snap_ID /* Vorgänger des ersten mit auswerten für Differenz per LAG */
+                                      WHERE  st.Snap_ID = ss.Snap_ID /* Predecessor of the first one with evaluation for difference per LAG */
                                       AND    st.Stat_Name IN ('table fetch continued row', 'table fetch by rowid', 'table scan rows gotten')
                                     ) hist
-                              WHERE  hist.Value >= 0    /* Ersten Snap nach Reboot ausblenden */
-                              AND    hist.Snap_ID > hist.Min_Snap_ID /* Vorgaenger des ersten Snap fuer LAG wieder ausblenden */
+                              WHERE  hist.Value >= 0    /* Hide first snap after reboot */
+                              AND    hist.Snap_ID > hist.Min_Snap_ID /* Hide predecessors of the first Snap for LAG again */
                               GROUP BY ROUND(Begin_Interval_Time, 'MI')
                              ) x
                       ORDER BY 1

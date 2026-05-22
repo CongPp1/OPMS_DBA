@@ -8,7 +8,7 @@ module Dragnet::ProblemsWithParallelQueryHelper
         {
             :name  => t(:dragnet_helper_77_name, :default=>'Long running queries without usage of parallel query (Evaluation of SGA)'),
             :desc  => t(:dragnet_helper_77_desc, :default=>'For long running queries usage of parallel query feature may dramatically reduce runtime.'),
-            :sql=>  "SELECT /*+ ORDERED USE_HASH(s) \"DB-Tools Ramm ohne Parallel Query\"*/
+            :sql=>  "SELECT /*+ ORDERED USE_HASH(s) \"/* DB-Tools  ohne Parallel Query\"*/
                              s.Inst_ID, s.SQL_ID,
                              s.Parsing_Schema_Name \"Parsing Schema Name\",
                              ROUND(s.Elapsed_Time/10000)/100 Elapsed_Time_Sec,
@@ -32,7 +32,7 @@ module Dragnet::ProblemsWithParallelQueryHelper
         {
             :name  => t(:dragnet_helper_141_name, :default=>'Long running queries without usage of parallel query (Evaluation of AWR history)'),
             :desc  => t(:dragnet_helper_77_desc, :default=>'For long running queries usage of parallel query feature may dramatically reduce runtime.'),
-            :sql=>  "SELECT /*+ ORDERED USE_HASH(s) \"DB-Tools Ramm ohne Parallel Query aus Historie\"*/
+            :sql=>  "SELECT /*+ ORDERED USE_HASH(s) \"/* DB-Tools  ohne Parallel Query aus Historie\"*/
                              s.*,
                              ROUND(s.Elapsed_Time_Sec/DECODE(s.Executions, 0, 1, s.Executions),2) \"Elapsed time per exec (secs)\",
                              (SELECT SQL_Text FROM DBA_Hist_SQLText t WHERE t.DBID = s.DBID AND t.SQL_ID = s.SQL_ID AND RowNum < 2) Statement
@@ -107,7 +107,7 @@ Selection considers current SGA.'),
             :desc  => t(:dragnet_helper_80_desc, :default=>'If using parallelel query accidentally not parallelized accesses on large structures may dramatically increase runtime of statement.
 Leading INDEX-RANGE-SCAN for cascading nested loop joins should be transferred to WITH … /*+ MATERIALIZE */ and selected in main statement in parallel.
 Selection considers AWR history.'),
-            :sql=>  "SELECT /* DB-Tools Ramm Nichparallel Anteile bei PQ */ * FROM (
+            :sql=>  "SELECT /* DB-Tools Nichparallel Anteile bei PQ */ * FROM (
                       SELECT /*+ NO_MERGE */ x.*, ps.Operation, ps.Options, ps.Object_Type, ps.Object_Owner, ps.Object_Name,
                              CASE
                              WHEN ps.Object_Type LIKE 'TABLE%' THEN (SELECT Num_Rows FROM DBA_All_Tables t WHERE t.Owner=ps.Object_Owner AND t.Table_Name=ps.Object_Name)
@@ -153,7 +153,7 @@ Selection considers AWR history.'),
             :name  => t(:dragnet_helper_81_name, :default=>'SQLs executed in parallel but with usage of stored functions without PARALLEL_ENABLE'),
             :desc  => t(:dragnet_helper_81_desc, :default=>'Stored functions not for parallel execution per pragma PARALLEL_ENABLE lead  to serial processing if statements that should be executed in parallel.
 Listed functions should be checked if they can be expanded by pragma PARALLEL_ENABLE.'),
-            :sql=>  "WITH /* DB-Tools Ramm Serialisierung in PQ durch Stored Functions */
+            :sql=>  "WITH /* DB-Tools Serialisierung in PQ durch Stored Functions */
                       Arguments AS (SELECT /*+ NO_MERGE MATERIALIZE */ Owner, Package_Name, Object_Name FROM DBA_Arguments WHERE Position = 0), /* Filter package function names from DBA_Procedures */
                       ProcLines AS (
                             SELECT /*+ NO_MERGE MATERIALIZE */ *
@@ -215,7 +215,7 @@ Listed functions should be checked if they can be expanded by pragma PARALLEL_EN
 For small data structures it is often wanted, for large data structures it may be due to missing PARALLEL-hints.
 This Selection lists all statements with 'PARALLEL_FROM_SERIAL'-processing after full-scan on objects as candidates for forgotten parallelising."),
             :sql=>  "WITH SQL_Plan AS (SELECT /*+ NO_MERGE MATERIALIZE */ DBID, SQL_ID, Operation, Options, Object_Owner, Object_Name, Plan_Hash_Value, Other_Tag, Timestamp, ID, Parent_ID FROM DBA_Hist_SQL_PLan)
-                     SELECT /* DB-Tools Ramm PARALLEL_FROM_SERIAL in PQ */ * FROM (
+                     SELECT /* DB-Tools PARALLEL_FROM_SERIAL in PQ */ * FROM (
                       SELECT /*+ NO_MERGE */ a.*, (SELECT SQL_Text FROM DBA_Hist_SQLText t WHERE t.DBID=a.DBID AND t.SQL_ID=a.SQL_ID AND RowNum < 2) SQLText,
                              CASE
                              WHEN Operation='TABLE ACCESS' THEN (SELECT Num_Rows FROM DBA_All_Tables t WHERE t.Owner=Object_Owner AND t.Table_Name=Object_Name)
@@ -294,7 +294,7 @@ Overallocation of PQ servers may result in serial processing og other SQLs estim
             :name  => t(:dragnet_helper_105_name, :default=>'Statements with planned parallel execution forced to serial'),
             :desc  => t(:dragnet_helper_105_desc, :default=>'PX COORDINATOR FORCED SERIAL in execution plan shows that optimizer assumed to process in parallel but detects reasons that prevents parallel execution (e.g. stored functions without PARALLEL_ENABLE).
 The operations below that execution plan line are not really executed in parallel although the optimizer has marked them for parallel execution!'),
-            :sql=>  "SELECT /* DB-Tools Ramm FORCE SERIAL in PQ */ x.* ,
+            :sql=>  "SELECT /* DB-Tools FORCE SERIAL in PQ */ x.* ,
                              (SELECT SUBSTR(SQL_Text,1,100) FROM DBA_Hist_SQLText t WHERE t.DBID=x.DBID AND t.SQL_ID=x.SQL_ID) SQLText
                       FROM   (SELECT p.DBID, p.SQL_ID, p.Plan_Hash_Value, MIN(Occurrences_in_Plan) Occurrences_in_Plan, s.Parsing_Schema_Name,
                                      ROUND(SUM(s.Elapsed_Time_Delta)/1000000) Elapsed_Time_Secs,

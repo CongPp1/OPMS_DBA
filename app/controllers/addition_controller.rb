@@ -10,7 +10,7 @@ class AdditionController < ApplicationController
     max_result_count = params[:maxResultCount]
     @instance = prepare_param_instance
     @show_partitions = params[:show_partitions]
-    save_session_time_selection                  # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection                  # Buffer values ​​for later reuse
 
     if @show_partitions == '1'
       partition_expression = "Partition_Name"
@@ -216,7 +216,7 @@ class AdditionController < ApplicationController
   end # list_db_cache_historic_timeline
 
   def list_blocking_locks_history
-    save_session_time_selection                   # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection                   # Buffer values ​​for later reuse
     @min_wait_ms = prepare_param_int :min_wait_ms
 
     # Sprungverteiler nach diversen commit-Buttons
@@ -577,7 +577,7 @@ class AdditionController < ApplicationController
 
 
   def list_object_increase
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
 
     @wherestr = String.new
     @whereval = []
@@ -670,7 +670,7 @@ class AdditionController < ApplicationController
     sizes.each do |s|
       if record[:gather_date] != s.gather_date  # Gruppenwechsel Datum
         @sizes << record
-        record = {:gather_date=>s.gather_date}  # Neuer Record
+        record = {:gather_date=>s.gather_date}  # New record
       end
       # noinspection RubyScope
       record[:total] = 0 unless record[:total]
@@ -977,8 +977,8 @@ class AdditionController < ApplicationController
     @groupfilter = @groupfilter.to_unsafe_h.to_h.symbolize_keys  if @groupfilter.class == ActionController::Parameters
     raise "Parameter groupfilter should be of class Hash or ActionController::Parameters" if @groupfilter.class != Hash
     @groupkey    = groupkey
-    @where_string  = String.new                                                 # Filter-Text für nachfolgendes Statement mit AND-Erweiterung
-    @where_values = []                                                          # Filter-werte für nachfolgendes Statement
+    @where_string  = String.new                                                 # Filter text for the following statement mit AND-Erweiterung
+    @where_values = []                                                          # Filter values ​​for the following statement
 
     @groupfilter.each {|key,value|
       sql = blocking_locks_groupfilter_values(key)[:sql].clone

@@ -40,7 +40,7 @@ module Dragnet::ForeignKeyConstraintHelper
                                               AND MIN(cc.Position) = 1 /* Consider all constraint columns starting with the first */
                                               AND MIN(cc.Column_Count) = COUNT(*) /* All columns of the constraint are contained in index */
                                              )
-                    SELECT /* DB-Tools Ramm  Index fehlt fuer Foreign Key*/
+                    SELECT /* DB-Tools  Index fehlt fuer Foreign Key*/
                            LOWER(Ref.Owner)||'.'||Ref.Table_Name Table_name,
                            reft.Num_Rows,
                            ref.Constraint_Name,

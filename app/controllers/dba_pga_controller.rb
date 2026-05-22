@@ -77,7 +77,7 @@ class DbaPgaController < ApplicationController
     @instance = prepare_param_instance
     @dbid     = prepare_param_dbid
     raise PopupMessageException.new("Parameter 'Instance' must be set") unless @instance
-    save_session_time_selection   # werte in session puffern
+    save_session_time_selection   # buffer values ​​in session
 
 
     snaps = sql_select_first_row [

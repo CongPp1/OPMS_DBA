@@ -14,7 +14,7 @@ Additional columns with low selectivity are useful only if:
 Without these reasons additional columns with low selectivity may be removed from index.
 This selection already suppresses indexes used for elimination of 'table access by rowid'."),
         :sql=> "\
-SELECT /* DB-Tools Ramm: low selectivity */ *
+SELECT /*  DB-Tools : low selectivity */ *
 FROM
        (
         SELECT /*+ NO_MERGE USE_HASH(i ms io) */

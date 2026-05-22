@@ -55,7 +55,7 @@ module Dragnet::SqlsWrongExecutionPlanHelper
             :desc  => t(:dragnet_helper_93_desc, :default=>'Frequently executed nested loop operations on large (not fitting into DB-cache) tables may cause large runtime of SQL.
 Listed statements should be checked for use of hash join instead.
 This statement executes only for current (login) RAC-instance. Please execute separate for every RAC-instance (due to extremely large runtimes accessing GV$-tables).'),
-            :sql=>  "SELECT /* DB-Tools Ramm Nested Loop auf grossen Tabellen */ * FROM (
+            :sql=>  "SELECT /* DB-Tools Nested Loop auf grossen Tabellen */ * FROM (
                       SELECT /*+ PARALLEL(p,2) PARALLEL(s,2) */
                              p.Inst_ID, p.SQL_ID, p.Plan_Hash_Value, p.operation, p.Object_Type,  p.options, p.Object_Name,
                              ROUND(s.Elapsed_Time/1000000) Elapsed_Secs, s.Executions, s.Rows_Processed,

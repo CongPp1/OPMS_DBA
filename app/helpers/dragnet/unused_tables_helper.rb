@@ -64,7 +64,7 @@ This selections scans SGA as well as AWR history.
                                           WHERE  Referenced_Type = 'TABLE'
                                           GROUP BY Referenced_Owner, Referenced_Name
                                          )
-                    SELECT /* DB-Tools Ramm not used tables */ o.*, sz.MBytes, ob.Created, ob.Last_DDL_Time, tm.Timestamp Last_DML_Timestamp, tm.Inserts, tm.Updates, tm.Deletes,
+                    SELECT /* DB-Tools not used tables */ o.*, sz.MBytes, ob.Created, ob.Last_DDL_Time, tm.Timestamp Last_DML_Timestamp, tm.Inserts, tm.Updates, tm.Deletes,
                            d.Dependencies
                     FROM Tabs_Inds o
                     LEFT OUTER JOIN used ON used.Object_Owner = o.Owner AND used.Object_Name = o.Object_Name
@@ -84,7 +84,7 @@ This selections scans SGA as well as AWR history.
 If last analyze table was far enough in history this selection may help to detect gaps in housekeeping.
 Stated here are inserts and updates since last GATHER_TABLE_STATS for tables without any delete operations.
 '),
-            :sql=> "SELECT /* DB-Tools Ramm Housekeeping*/
+            :sql=> "SELECT /* DB-Tools Housekeeping*/
                              m.Table_Owner, m.Table_Name, t.Num_Rows, s.Size_MB, m.TimeStamp Last_DML_Timestamp, t.Last_analyzed, t.Monitoring,
                              ROUND(SYSDATE - t.Last_Analyzed, 2) Days_After_Analyze,
                              m.Inserts, ROUND(m.Inserts/(SYSDATE - t.Last_Analyzed)) Inserts_Per_Day, m.Updates, ROUND(m.Updates/(SYSDATE - t.Last_Analyzed)) Updates_Per_Day, m.Deletes, m.Truncated, m.Drop_Segments
@@ -169,7 +169,7 @@ For valid function of this selection table analysis should only be done if there
 Each NULL-value of a record claims one byte if not all subsequent columns of that record are also NULL.
 You can use virtual columns instead if this table structure is precondition (SAP etc.).
 '),
-            :sql=> "SELECT /* DB-Tools Ramm  Spalten mit komplett  NULL-Values */
+            :sql=> "SELECT /* DB-Tools  Spalten mit komplett  NULL-Values */
                              c.Owner, c.Table_Name, c.Column_Name, t.Num_Rows, c.Num_Nulls, c.Num_Distinct
                       FROM   DBA_Tab_Columns c
                       JOIN   DBA_All_Tables t ON t.Owner = c.Owner AND t.Table_Name = c.Table_Name
@@ -183,7 +183,7 @@ You can use virtual columns instead if this table structure is precondition (SAP
             :desc  => t(:dragnet_helper_67_desc, :default=>'For columns of large tables with less DISTINCT-values meaning can be questioned.
 May be it their value is redundant to other columns of that table. In this case you can extract this column as separate master-data table with n:1-relation (normalization).
 '),
-            :sql=> "SELECT /* DB-Tools Ramm Spalten mit wenig Distinct-Values */
+            :sql=> "SELECT /* DB-Tools Spalten mit wenig Distinct-Values */
                              c.Owner, c.Table_Name, c.Column_Name, t.Num_Rows, c.Num_Nulls, c.Num_Distinct, c.Avg_Col_Len,
                              ROUND((c.Avg_Col_Len*(Num_Rows-Num_Nulls)+Num_Nulls)/(1024*1024),2) Megabyte_Column
                       FROM   DBA_Tab_Columns c
@@ -203,7 +203,7 @@ May be it their value is redundant to other columns of that table. In this case 
             :name  => t(:dragnet_helper_68_name, :default=>'Unused marked but not physical deleted columns'),
             :desc  => t(:dragnet_helper_68_desc, :default=>'For as unused marked columns it may be worth to reorganize the table by ALTER TABLE DROP UNUSED COLUMNS or recreation of table.
 '),
-            :sql=> 'SELECT /* DB-Tools Ramm Unused gesetzte Spalten ohne ALTER TABLE DROP UNUSED COLUMNS*/ cs.*, t.Num_Rows
+            :sql=> 'SELECT /* DB-Tools Unused gesetzte Spalten ohne ALTER TABLE DROP UNUSED COLUMNS*/ cs.*, t.Num_Rows
                       FROM   DBA_Unused_Col_Tabs cs
                       JOIN   DBA_All_Tables t ON t.Owner = cs.Owner AND t.Table_Name = cs.Table_Name
                       ORDER BY t.Num_Rows*cs.Count DESC NULLS LAST',

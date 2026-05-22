@@ -29,7 +29,7 @@ class ActiveSessionHistoryController < ApplicationController
 
   # Anzeige DBA_Hist_Active_Sess_History
   def list_session_statistic_historic
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     @instance = prepare_param_instance
     params[:groupfilter] = {}
     params[:groupfilter][:DBID]                  = prepare_param_dbid

@@ -8,7 +8,7 @@ module Dragnet::OptimalIndexStorageHelper
             :name  => t(:dragnet_helper_1_name, :default=> 'Check for PCTFree >= 10'),
             :desc  => t(:dragnet_helper_1_desc, :default=> '0 or very small values of PCTFree for indices can lead to performance losses, especially when inserting sorted data.
 It is recommended to have at least 10% free space in the index blocks to avoid frequent block splits.'),
-            :sql=> "SELECT /* DB-Tools Ramm Index-PCTFree */* FROM (
+            :sql=> "SELECT /* DB-Tools Index-PCTFree */* FROM (
                           SELECT Owner, Table_Name, Index_Name, NULL Partition_Name, PCT_Free, Num_Rows
                           FROM DBA_Indexes
                           WHERE PCT_FREE < ?
@@ -45,7 +45,7 @@ WITH Segments AS (SELECT /*+ NO_MERGE MATERIALIZE */ Owner, Segment_Name, ROUND(
      Tab_Columns AS (SELECT /*+ NO_MERGE MATERIALIZE */ Owner, Table_Name, Column_Name, Avg_Col_Len FROM DBA_Tab_Columns),
      Ind_Columns AS (SELECT /*+ NO_MERGE MATERIALIZE */ Index_Owner, Index_Name, Column_Name, Column_Position FROM DBA_Ind_Columns),
      All_Tables AS (SELECT /*+ NO_MERGE MATERIALIZE */ Owner, Table_Name, IOT_Type FROM DBA_All_Tables)
-SELECT /* DB-Tools Ramm Komprimierung Indizes */  *
+SELECT /* DB-Tools Komprimierung Indizes */  *
 FROM (
             SELECT ROUND(i.Num_Rows/i.Distinct_Keys) Rows_Per_Key, i.Num_Rows, i.Owner, i.Index_Name, i.Index_Type, i.Table_Owner, i.Table_Name,
                    t.IOT_Type, seg.MBytes, Distinct_Keys, Col_Lens.Avg_Col_Len
@@ -73,7 +73,7 @@ ORDER BY NVL(Avg_Col_Len, 5) * Num_Rows * Num_Rows/Distinct_Keys DESC NULLS LAST
             :desc  => t(:dragnet_helper_3_desc, :default=> 'Index-compression (COMPRESS) allows reduction of physical size for OLTP-indexes with low selectivity.
   For indexes with low selectivity reduction of index-size by compression can be 1/4 to 1/3.
   For compressed index number of leaf blocks should decrease, in best case all references to data blocks of one key should fit into only one leaf block'),
-            :sql=> "SELECT /* DB-Tools Ramm Komprimierung Indizes */ i.Owner \"Owner\", i.Table_Name, Index_Name, Index_Type, BLevel, Distinct_Keys,
+            :sql=> "SELECT /* DB-Tools Komprimierung Indizes */ i.Owner \"Owner\", i.Table_Name, Index_Name, Index_Type, BLevel, Distinct_Keys,
                              ROUND(i.Num_Rows/i.Distinct_Keys) Rows_Per_Key,
                              Avg_Leaf_Blocks_Per_Key, Avg_Data_Blocks_Per_Key, i.Num_Rows, t.IOT_Type
                       FROM   DBA_Indexes i
@@ -262,7 +262,7 @@ ORDER BY seg.MBytes DESC NULLS LAST
   Positive: Omission of 'table-access by row-id' while accessing data by index, because PKey-index already contains all table data
   Negative: Enlargement of secondary indexes because of redundant saving of PKey-values in every secondary index
   Negative: Enlargement of primary key because it contains whole table data"),
-            :sql=> "SELECT /* DB-Tools Ramm IOT-Empfehlung */ *
+            :sql=> "SELECT /* DB-Tools IOT-Empfehlung */ *
                       FROM   (
                               SELECT
                                      (SELECT Count(*) FROM DBA_Tab_Columns c WHERE c.Owner=t.Owner AND c.Table_Name=t.Table_Name) Anzahl_Columns,

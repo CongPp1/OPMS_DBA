@@ -981,7 +981,7 @@
     Anforderungen auf Blocktransfer im RAC-Verbund führen zu „gc buffer busy“-Wait-Events, wenn die betreffenden Blöcke in der liefernden Instanz gerade von „log buffer space“ bzw. „log file sync“ betroffen sind.
     Die Wahrscheinlichkeit eines „log buffer space“-Events ist von der Häufigkeit schreibender Operationen abhängig. Die folgenden Selektionen ermitteln häufig ausgeführte schreibende Statements als Kandidaten.
     Lösung besteht in der Zusammenfassung mehrerer Records (Bulk-Berarbeitung) bei Schreibzugriffen.
-  dragnet_helper_74_name:                                   Schreibende Zugriffe nach Executions (Aktuelle SGA)
+  dragnet_helper_74_name:                                   Write accesses after Executions (Aktuelle SGA)
   dragnet_helper_74_param_1_hint:                           Minimale anzahl geschriebene Rows für Aufnahme in Selektion
   dragnet_helper_74_param_1_name:                           Minimale Anzahl geschriebene Rows
 
@@ -991,7 +991,7 @@
     Anforderungen auf Blocktransfer im RAC-Verbund führen zu „gc buffer busy“-Wait-Events, wenn die betreffenden Blöcke in der liefernden Instanz gerade von „log buffer space“ bzw. „log file sync“ betroffen sind.
     Die Wahrscheinlichkeit eines „log buffer space“-Events ist von der Häufigkeit schreibender Operationen abhängig. Die folgenden Selektionen ermitteln häufig ausgeführte schreibende Statements als Kandidaten.
     Lösung besteht in der Zusammenfassung mehrerer Records (Bulk-Berarbeitung) bei Schreibzugriffen.
-  dragnet_helper_75_name:                                   Schreibende Zugriffe nach Executions (AWR-Historie)
+  dragnet_helper_75_name:                                   Write accesses after Executions (AWR-Historie)
   dragnet_helper_75_param_2_hint:                           Minimale anzahl geschriebene Rows für Aufnahme in Selektion
   dragnet_helper_75_param_2_name:                           Minimale Anzahl geschriebene Rows
 

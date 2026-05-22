@@ -43,7 +43,7 @@ module DiagramHelper
       record[:timestamp] = s[time_key_name] unless record[:timestamp]           # Gruppenwechsel-Kriterium mit erstem Record initialisisieren
       if record[:timestamp] != s[time_key_name]                                 # Neuer Zeitpunkt
         result_data_array << record                                                          # Wegschreiben des alten Zeitpunkt-Records
-        record = {}                                                             # Neuer Record bis naechsten Gruppenwechsel
+        record = {}                                                             # New record bis naechsten Gruppenwechsel
         record[:timestamp] = s[time_key_name]                                   # Zeitpunkt merken im Record
       end
       record[s[curve_key_name]] = s[value_key_name]

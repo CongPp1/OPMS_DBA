@@ -248,7 +248,7 @@ module ApplicationHelper
       retval = nil
       retval = PanoramaConnection.instance_number unless PanoramaConnection.rac? # set valid instance number if not RAC
     end
-    ClientInfoStore.write_for_client_key(get_decrypted_client_key,:instance, retval)                               # Werte puffern fuer spaetere Wiederverwendung
+    ClientInfoStore.write_for_client_key(get_decrypted_client_key,:instance, retval)                               # Buffer values ​​for later reuse
     retval
   end
 

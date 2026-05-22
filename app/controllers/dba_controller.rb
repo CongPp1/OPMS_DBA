@@ -460,7 +460,7 @@ oradebug setorapname diag
 
   def list_redologs_log_history
     @instance = prepare_param_instance
-    save_session_time_selection  # werte in session puffern
+    save_session_time_selection  # buffer values ​​in session
     @time_groupby = prepare_param(:time_groupby).to_sym
 
     wherestr = String.new
@@ -520,7 +520,7 @@ oradebug setorapname diag
   def list_redologs_historic
     @instance = prepare_param_instance
     @dbid     = prepare_param_dbid
-    save_session_time_selection  # werte in session puffern
+    save_session_time_selection  # buffer values ​​in session
 
     wherestr = String.new
     whereval = []
@@ -1730,7 +1730,7 @@ oradebug setorapname diag
   end
 
   def list_server_logs
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     @log_type     = params[:log_type]
     @incl_filter  = params[:incl_filter]
     @excl_filter  = params[:excl_filter]

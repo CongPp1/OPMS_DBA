@@ -59,7 +59,7 @@ Negative aspect is multiple access on every partition of index if partition key 
             :name  => t(:dragnet_helper_12_name, :default=> 'Local-partitioning of unique indexes with partition-key = index-column'),
             :desc  => t(:dragnet_helper_12_desc, :default=>"Also unique indexes may be local partitioned if partition key is in identical order leading part of index.
 This way partition pruning may be used for access on unique indexes plus possible decrease of index' BLevel."),
-            :sql=> "SELECT /* DB-Tools Ramm Partitionierung Unique Indizes */
+            :sql=> "SELECT /* DB-Tools Partitionierung Unique Indizes */
                               t.Owner, t.Table_Name, i.Uniqueness, tc.Column_Name Partition_Key1, i.Index_Name, t.Num_Rows, seg.MBytes
                       FROM   DBA_All_Tables t
                              JOIN DBA_Part_Key_Columns tc
@@ -144,7 +144,7 @@ Solution for such situations is global (not) partitioning of index.'),
                              LEFT OUTER JOIN Ash ON ash.Instance_Number = p.Inst_ID AND ash.SQL_ID = p.SQL_ID AND ash.SQL_Plan_Hash_Value = p.Plan_Hash_Value AND ash.SQL_Plan_Line_ID = p.Plan_Line_ID
                              GROUP BY Inst_ID, Object_Owner, Object_Name
                             )
-              SELECT /* DB-Tools Ramm: mehrfach frequentierte Hash-Partitions */ i.Owner, i.Index_Name, i.Index_Type,
+              SELECT /*  DB-Tools : mehrfach frequentierte Hash-Partitions */ i.Owner, i.Index_Name, i.Index_Type,
                                            i.Table_Name, pl.Executions, pl.Elapsed_Secs Elapsed_Secs_All_SQLs, i.Num_Rows, pl.Heaviest_SQL_ID, Heaviest_SQL_Elapsed_Secs,
                                            p.Partitioning_Type, c.Column_Position, c.Column_Name Part_Col, ic.Column_Name Ind_Col,
                                            i.UniqueNess, i.Compression, i.BLevel, i.Distinct_Keys, i.Avg_Leaf_Blocks_per_Key,

@@ -13,7 +13,7 @@ module Dragnet::SoftParseCursorCachingHelper
                                     - usage of statement caches in application server or JDBC-driver
                                     - usage of DB-feature "session cached cursor"
               '),
-        sql:  "SELECT /* DB-Tools Ramm Parse-Ratio single values */ s.*, ROUND(Executions/DECODE(Parses, 0, 1, Parses),2) \"Execs/Parse\"
+        sql:  "SELECT /* DB-Tools Parse-Ratio single values */ s.*, ROUND(Executions/DECODE(Parses, 0, 1, Parses),2) \"Execs/Parse\"
                       FROM   (
                               SELECT s.SQL_ID, s.Instance_Number, Parsing_schema_Name, SUM(s.Executions_Delta) Executions,
                                      SUM(s.Parse_Calls_Delta) Parses

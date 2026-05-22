@@ -9,7 +9,7 @@ module Dragnet::DragnetSqlsTuningSgaPgaHelper
             :name  => t(:dragnet_helper_96_name, :default=>'Identification of hot blocks in DB-cache: frequent access on small objects'),
             :desc  => t(:dragnet_helper_96_desc, :default=>"Statements with frequent read blocks in DB-cache cause risk of 'cache buffers chains' latch waits.
 This selection scans for objects with high block access rate compared to size of object."),
-            :sql =>  "SELECT /*+ NO_MERGE USE_HASH(o s) */ /* DB-Tools Ramm Hot-Blocks im DB-Cache */
+            :sql =>  "SELECT /*+ NO_MERGE USE_HASH(o s) */ /* DB-Tools Hot-Blocks im DB-Cache */
                              s.Instance_Number Inst, o.Owner, o.Object_Name, o.SubObject_Name,
                              o.Object_Type,
                              s.Logical_Reads,
@@ -193,7 +193,7 @@ Especially this is true for generated dynamic SQL statements (e.g. from OR-mappe
             :name  => t(:dragnet_helper_112_name, :default=>'Active sessions (from AWR history DBA_Hist_Active_Sess_History)'),
             :desc  => t(:dragnet_helper_112_desc, :default=>'Number of simultaneously active sessions allows conclusions on system load.
                           Peak number of simultaneously active sessions can be the base for sizing of session-pools (e.g. for application server).'),
-            :sql=>  "SELECT /*+ PARALLEL(s,4) DB-Tools Ramm: active sessions */
+            :sql=>  "SELECT /*+ PARALLEL(s,4) /* DB-Tools : active sessions */
                              Sample_Time, count(*) \"Active Sessions\"
                       FROM   DBA_hist_Active_Sess_History s
                       WHERE  Sample_Time >SYSDATE - ?
@@ -209,7 +209,7 @@ Especially this is true for generated dynamic SQL statements (e.g. from OR-mappe
         {
             :name  => t(:dragnet_helper_3_12_name, :default=> 'Non-optimal database configuration parameters'),
             :desc  => t(:dragnet_helper_3_12_desc, :default=> 'Detection of non-optimal or incompatible database parameters'),
-            :sql=>  "SELECT /* DB-Tools Ramm DB-Parameter */
+            :sql=>  "SELECT /* DB-Tools DB-Parameter */
                              Inst_ID, Name, Value, 'Value should be 0 if cursor_sharing is used because lookup to session cached cursors is done before converting literals to bind variables' Description
                       FROM   #{PanoramaConnection.system_parameter_table} p
                       WHERE  Name = 'session_cached_cursors'

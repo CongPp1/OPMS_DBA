@@ -10,7 +10,7 @@ module Dragnet::UnnecessaryExecutionsHelper
             :desc  => t(:dragnet_helper_83_desc, :default=>'Select- / update- or delete-statements, which due to their filter conditions never hit records, may be candidates for elimination.
 Otherwise they can be treated as check statements that never expect hits in normal way.
 '),
-            :sql=>  "SELECT /*+ USE_NL(t)  “DB-Tools Ramm Ohne Result */ s.*, t.SQL_Text \"SQL-Text\"
+            :sql=>  "SELECT /*+ USE_NL(t)  “/* DB-Tools  Ohne Result */ s.*, t.SQL_Text \"SQL-Text\"
                       FROM  (
                                SELECT /*+ NO_MERGE ORDERED */ s.DBID, s.SQL_ID, s.Instance_number \"Instance\",
                                       NVL(MIN(Parsing_Schema_Name), '[UNKNOWN]') \"UserName\", /* sollte immer gleich sein in Gruppe */

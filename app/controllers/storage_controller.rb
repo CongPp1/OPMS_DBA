@@ -200,7 +200,7 @@ class StorageController < ApplicationController
 
     temp_schemas = {}
     schemas.each do |s|
-      temp_schemas[s.schema] = {} unless temp_schemas[s.schema]                             # Neuer Record wenn noch nicht existiert
+      temp_schemas[s.schema] = {} unless temp_schemas[s.schema]                             # New record wenn noch nicht existiert
       temp_schemas[s.schema][s.segment_type] = 0 unless temp_schemas[s.schema][s.segment_type]  # Initialisierung
       temp_schemas[s.schema][s.segment_type] = temp_schemas[s.schema][s.segment_type] + s.mbytes
     end
@@ -1337,7 +1337,7 @@ class StorageController < ApplicationController
   end
 
   def list_exadata_io_load_by_cell_db
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     @dbid = prepare_param_dbid
     @cell_hash = prepare_param_int(:cell_hash) || 0
     @src_dbid = prepare_param_int( :src_dbid) || 0
@@ -1395,7 +1395,7 @@ class StorageController < ApplicationController
   end
 
   def list_exadata_io_load_distribution
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     @dbid       = prepare_param_dbid
     @cell_hash = prepare_param_int(:cell_hash) || 0
     @src_dbid = prepare_param_int( :src_dbid) || 0

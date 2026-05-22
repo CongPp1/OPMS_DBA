@@ -12,7 +12,7 @@ Writing operations (Insert/Update/Delete) which cannot write into log buffer dur
 Requests for block transfer in RAC environment lead to „gc buffer busy“ wait events, if requested blocks in delivering RAC-instance are affected by simultaneous „log buffer space“ or „log file sync“ events.
 The likelihood of „log buffer space“ events depends on frequency of writing operations. This selection determines heavy frequented write SQLs as candidates for deeper consideration.
 Solution can be the aggregation of multiple writes (bulk-processing).'),
-            :sql=>  "SELECT /* DB-Tools Ramm: Schreibende Zugriffe nach Executes */
+            :sql=>  "SELECT /*  DB-Tools : Write accesses after Executes */
                          Inst_ID, SQL_ID, Parsing_Schema_Name, Executions, Rows_Processed, ROUND(Rows_Processed/Executions,2) \"Rows per Exec\",
                          ROUND(Elapsed_Time/1000000) Elapsed_Time_Secs, SQL_Text
                   FROM   GV$SQLArea
@@ -29,7 +29,7 @@ Writing operations (Insert/Update/Delete) which cannot write into log buffer dur
 Requests for block transfer in RAC environment lead to „gc buffer busy“ wait events, if requested blocks in delivering RAC-instance are affected by simultaneous „log buffer space“ or „log file sync“ events.
 The likelihood of „log buffer space“ events depends on frequency of writing operations. This selection determines heavy frequented write SQLs as candidates for deeper consideration.
 Solution can be the aggregation of multiple writes (bulk-processing).'),
-            :sql=>  "SELECT /* DB-Tools Ramm: Schreibende Zugriffe nach Executes */
+            :sql=>  "SELECT /*  DB-Tools : Write accesses after Executes */
                          s.Instance_Number, s.SQL_ID, s.Executions, s.Rows_Processed,
                          ROUND(s.Rows_Processed/s.Executions,2) \"Rows per Exec\", t.SQL_Text, TO_CHAR(SUBSTR(t.SQL_Text,1,100))
                   FROM   (
@@ -50,7 +50,7 @@ Solution can be the aggregation of multiple writes (bulk-processing).'),
         {
             :name  => t(:dragnet_helper_119_name, :default=>'Commit / Rollback - Emergence'),
             :desc  => t(:dragnet_helper_119_desc, :default=>'From the amount of commit and rollback operations one can conclude to possibly problematic application behaviour'),
-            :sql=>  "SELECT /* DB-Tools Ramm Commits und Rollbacks in gegebenen Zeitraum */ Begin, Instance_Number, User_Commits, User_Rollbacks,
+            :sql=>  "SELECT /* DB-Tools Commits und Rollbacks in gegebenen Zeitraum */ Begin, Instance_Number, User_Commits, User_Rollbacks,
                          ROUND(User_Rollbacks/(DECODE(User_Commits+User_Rollbacks, 0, 1, User_Commits+User_Rollbacks))*100) Percent_Rollback,
                          Rollback_Changes
                   FROM   (
@@ -86,7 +86,7 @@ Short targets for recovery and therefore more aggressive DB-writer my lead to:
 - many small asychroneous write requests are executed instead of instead of less requests with more blocks per request (normally until 3000 DB-blocks per async. write request)
 - maximum limit of OS for simultaneous async. write requests is reached and I/O is considerably slowed down due to that
 '),
-            :sql=> 'SELECT /*+ DB-Tools Ramm MTTR-Historie */ r.Instance_Number, ss.Begin_Interval_Time, target_mttr, estimated_mttr, optimal_logfile_size, CKPT_BLOCK_WRITES
+            :sql=> 'SELECT /*+ /* DB-Tools  MTTR-Historie */ r.Instance_Number, ss.Begin_Interval_Time, target_mttr, estimated_mttr, optimal_logfile_size, CKPT_BLOCK_WRITES
                   FROM   dba_hist_instance_recovery r
                   JOIN   DBA_Hist_Snapshot ss ON ss.DBID = r.DBID AND ss.Instance_Number = r.Instance_Number AND ss.Snap_ID = r.Snap_ID
                   WHERE  r.Instance_Number = ?

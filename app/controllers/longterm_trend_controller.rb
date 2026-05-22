@@ -3,7 +3,7 @@ class LongtermTrendController < ApplicationController
   include LongtermTrendHelper
 
   def list_longterm_trend
-    save_session_time_selection    # Werte puffern fuer spaetere Wiederverwendung
+    save_session_time_selection    # Buffer values ​​for later reuse
     @instance = prepare_param_instance
     params[:groupfilter] = {}
     params[:groupfilter][:Instance]              = @instance if @instance
@@ -277,8 +277,8 @@ class LongtermTrendController < ApplicationController
     @groupfilter = @groupfilter.to_unsafe_h.to_h.symbolize_keys  if @groupfilter.class == ActionController::Parameters
     raise "Parameter groupfilter should be of class Hash or ActionController::Parameters" if @groupfilter.class != Hash
     @groupby    = groupby                  # Instanzvariablen zur nachfolgenden Nutzung
-    @where_string  = String.new             # Filter-Text für nachfolgendes Statement mit AND-Erweiterung für alle Union-Tabellen
-    @where_values = []              # Filter-werte für nachfolgendes Statement für alle Union-Tabellen
+    @where_string  = String.new             # Filter text for the following statement mit AND-Erweiterung für alle Union-Tabellen
+    @where_values = []              # Filter values ​​for the following statement für alle Union-Tabellen
 
     @groupfilter.each do |key,value|
       @groupfilter[key] = value.strip if key == 'time_selection_start' || key == 'time_selection_end'                   # Whitespaces entfernen vom Rand des Zeitstempels

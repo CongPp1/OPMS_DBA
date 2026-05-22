@@ -41,7 +41,7 @@ WITH Indexes AS (SELECT /*+ NO_MERGE MATERIALIZE */ Owner, Index_Name, Index_Typ
                        WHERE p.Object_Name IS NOT NULL
                        AND p.Object_Owner NOT IN (#{system_schema_subselect})
                       )
-SELECT /* DB-Tools Ramm nicht genutzte Indizes */ * FROM (
+SELECT /* DB-Tools nicht genutzte Indizes */ * FROM (
         SELECT i.Owner Index_Owner, i.Index_Name, i.Index_Type, i.Table_Owner, i.Table_Name, sz.MBytes,
                i.Num_Rows, i.Tablespace_Name, i.UniqueNess, i.Distinct_Keys,
                icg.Columns Index_Columns, rc.Ref_Constraint
@@ -85,7 +85,7 @@ SELECT /* DB-Tools Ramm nicht genutzte Indizes */ * FROM (
                        Indexes with only one key value and no NULLs in indexed columns my be definitely removed.
                        If used for ensurance of foreign keys you can often relinquish on these index because resulting FullTableScan on referencing table
                        in case of delete on referenced table may be accepted.'),
-            :sql=> "SELECT /* DB-Tools Ramm Sinnlose Indizes */
+            :sql=> "SELECT /* DB-Tools Sinnlose Indizes */
                             i.Owner \"Owner\", i.Table_Name, Index_Name, Index_Type, BLevel, Distinct_Keys,
                             ROUND(i.Num_Rows/DECODE(i.Distinct_Keys,0,1,i.Distinct_Keys)) \"Rows per Key\",
                             i.Num_Rows \"Rows Index\", t.Num_Rows \"Rows Table\", t.Num_Rows-i.Num_Rows \"Possible NULLs\", t.IOT_Type,
@@ -413,7 +413,7 @@ Due to the poor selectivity such indexes are mostly not useful for access optimi
                      WHERE  Constraint_Type IN ('R', 'P', 'U')
                      AND    Owner NOT IN (#{system_schema_subselect})
                     )
-                    SELECT /* DB-Tools Ramm Unnecessary index on Ref-Constraint*/
+                    SELECT /* DB-Tools Unnecessary index on Ref-Constraint*/
                            ri.Owner, ri.Table_Name, ri.Index_Name, ri.Rows_Origin \"No. of rows origin\", s.Size_MB \"Size of Index in MB\", p.Constraint_Name, ri.Column_Name,
                            ri.Position, pi.Table_Name Target_Table, pi.Index_Name Target_Index, pi.Num_Rows \"No. of rows target\", ri.No_of_Referencing_FK \"No. of referencing fk\"
                     FROM   (SELECT /*+ NO_MERGE */

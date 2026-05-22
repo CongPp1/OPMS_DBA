@@ -55,7 +55,7 @@ Calculated by high runtime and less result records.
 '),
             :sql=> "\
 WITH Backward AS (SELECT ? Days FROM Dual)
-SELECT /* DB-Tools Ramm FullTableScans */
+SELECT /* DB-Tools FullTableScans */
        SQL_ID, Object_Owner, Object_Name, Num_Rows,
        Executions,
        ROUND(Elapsed_Time_Secs)                   \"Elapsed secs for SQL total\",
