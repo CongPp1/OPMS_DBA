@@ -612,35 +612,39 @@ function wait_class_color(wait_class){
 }
 
 /**
- * Check if an update for Panorama is available
+ * Check if an update for OPMS is available
  * @param div_id id of div where update message should be shown
- * @param current_release current release of Panorama
+ * @param current_release current release of OPMS
  */
 function check4update(div_id, current_release){
     let update_div = jQuery('#'+div_id);
 
     // Send a GET request to the GitHub API to fetch the releases
-    fetch(`https://api.github.com/repos/rammpeter/Panorama/releases`)
-        .then(response => {
-            const status = response.status;
-             return response.json().then(data => ({ status, data }));
-        })
-        .then(({ status, data }) => {
-            if (status >= 300) {
-                throw new Error(`Status: ${status} ${JSON.stringify(data)}`);
-            } else {
-                // Extract the latest release tag from the response
+    jQuery.ajax({
+        url: "https://api.github.com/repos/CongPp1/OPMS_DBA/releases",
+        method: "GET",
+        success: function(data){
+            if(data.length > 0){
                 const latestReleaseTag = data[0].tag_name.substring(1);
-                if (latestReleaseTag !== current_release)
-                    update_div.html('<div style="color: red;">There is an update available: <a href="https://github.com/rammpeter/Panorama" target="_blank">'+'Version '+latestReleaseTag+'</a></div>');
-                else
-                    update_div.html('You are using the latest release');
+                if(latestReleaseTag !== current_release){
+                    update_div.html(
+                        '<div style="color:red;">' + 
+                        'There is an update available: ' + 
+                        '<a href="https://github.com/CongPp1/OPMS_DBA" target="_blank">' + 
+                        'Version ' + latestReleaseTag + 
+                        '</a></div>'
+                    )
+                } else {
+                    update_div.html(
+                        'You are using the latest release'
+                    )
+                }
             }
-        })
-        .catch(error => {
-            console.log('Check for update failed with error: '+error);
-        });
-
+        },
+        error: function(xhr, status, error){
+            console.log('Check for update failed: ' + error);
+        }
+    })
 }
 
 /**
